@@ -1,0 +1,9 @@
+/dist
+/examples/*/dist
+/examples/ferrisium_demo/assets/kernels/*
+!/examples/ferrisium_demo/assets/kernels/README.md
+/target
+/node_modules
+.codex
+AGENTS.md
+**/*.bazel

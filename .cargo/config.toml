@@ -1,0 +1,7 @@
+[alias]
+fmt-check = "fmt --all -- --check"
+lint = "clippy --workspace --all-targets --all-features -- -D warnings"
+lint-wasm = "clippy --workspace --target wasm32-unknown-unknown --all-features -- -D warnings"
+check-wasm = "check --workspace --target wasm32-unknown-unknown"
+test-doc = "test --workspace --doc"
+test-core = "test -p ferrisium_core"

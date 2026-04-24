@@ -1,0 +1,30 @@
+[package]
+name = "ferrisium_demo"
+edition.workspace = true
+license.workspace = true
+publish = false
+rust-version.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+bevy.workspace = true
+big_space.workspace = true
+ehttp.workspace = true
+ferrisium_anise.workspace = true
+ferrisium_bevy.workspace = true
+ferrisium_core.workspace = true
+geo.workspace = true
+h3o.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+bevy_egui = { version = "0.39.1", default-features = false, features = [
+    "default_fonts",
+    "render",
+] }
+getrandom.workspace = true
+js-sys.workspace = true
+wasm-bindgen.workspace = true
+web-sys = { version = "0.3", features = ["Location", "Storage", "Window"] }

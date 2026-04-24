@@ -1,0 +1,6 @@
+assets/ferrisium/skyboxes/*.png filter=lfs diff=lfs merge=lfs -text
+examples/ferrisium_demo/assets/textures/venus.jpg filter=lfs diff=lfs merge=lfs -text
+assets/ferrisium/skyboxes/milkyway_4096.png filter=lfs diff=lfs merge=lfs -text
+assets/ferrisium/skyboxes/milkyway_512.png filter=lfs diff=lfs merge=lfs -text
+assets/ferrisium/skyboxes/milkyway_1024.png filter=lfs diff=lfs merge=lfs -text
+assets/ferrisium/skyboxes/milkyway_2048.png filter=lfs diff=lfs merge=lfs -text

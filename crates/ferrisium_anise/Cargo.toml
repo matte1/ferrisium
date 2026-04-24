@@ -1,0 +1,14 @@
+[package]
+name = "ferrisium_anise"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anise.workspace = true
+bytes.workspace = true
+ferrisium_core.workspace = true

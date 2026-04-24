@@ -1,0 +1,4 @@
+test_tool = "nextest"
+test_workspace = false
+test_package = ["ferrisium_core"]
+examine_globs = ["crates/ferrisium_core/src/**/*.rs"]

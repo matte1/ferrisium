@@ -1,0 +1,20 @@
+[package]
+name = "ferrisium_bevy"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+bevy.workspace = true
+big_space.workspace = true
+ehttp.workspace = true
+ferrisium_core.workspace = true
+geo.workspace = true
+h3o.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom_02.workspace = true

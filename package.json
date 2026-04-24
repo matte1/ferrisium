@@ -1,0 +1,16 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "web:test": "playwright test",
+    "web:test:headed": "playwright test --headed",
+    "web:test:inspect": "playwright test --headed --debug",
+    "web:test:record": "FERRISIUM_WEB_TEST_VIDEO=on playwright test",
+    "web:test:record:perf": "FERRISIUM_WEB_TEST_PERF=1 FERRISIUM_WEB_TEST_VIDEO=on playwright test",
+    "web:test:scenarios": "FERRISIUM_WEB_TEST_SCENARIOS=1 FERRISIUM_WEB_TEST_VIDEO=on playwright test",
+    "web:test:scenarios:perf": "FERRISIUM_WEB_TEST_PERF=1 FERRISIUM_WEB_TEST_SCENARIOS=1 FERRISIUM_WEB_TEST_VIDEO=on playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1"
+  }
+}
