@@ -1,5 +1,7 @@
 #![cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 
+#[cfg(target_arch = "wasm32")]
+use bevy::pbr::MaterialPlugin;
 #[cfg(test)]
 use bevy::prelude::Visibility;
 #[cfg(target_arch = "wasm32")]
@@ -53,6 +55,12 @@ use crate::ephemeris_demo::{
 };
 #[cfg(target_arch = "wasm32")]
 use crate::h3_demo;
+#[cfg(target_arch = "wasm32")]
+use crate::solar_mode::{
+    earth_equirectangular_overlay_rotation, solar_earth_atmosphere_sun_direction_param,
+    solar_earth_night_lights_material, solar_earth_night_lights_radius_units,
+    DemoSolarEarthNightLightsMaterial, SOLAR_EARTH_NIGHT_LIGHTS_TEXTURE_PATH,
+};
 
 #[cfg(target_arch = "wasm32")]
 pub(crate) const EARTH_MARKER_RADIUS_FACTOR: f32 = 0.024;
@@ -79,7 +87,8 @@ pub(crate) const DEMO_GLOBE_SURFACE_LOD_DISTANCE_RADIUS_FACTOR: f64 = 1_000_000.
 
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn configure_globe_mode(app: &mut App) {
-    app.insert_resource(demo_globe_skybox_config().deferred())
+    app.add_plugins(MaterialPlugin::<DemoSolarEarthNightLightsMaterial>::default())
+        .insert_resource(demo_globe_skybox_config())
         .insert_resource(browser_demo_focus())
         .insert_resource(browser_demo_metric_focus_selection())
         .insert_resource(browser_demo_globe_camera_override())
@@ -109,6 +118,12 @@ pub(crate) fn configure_globe_mode(app: &mut App) {
                 sync_demo_globe_secondary_body_visibility
                     .after(spawn_demo_celestial_visuals)
                     .after(sync_metric_scene_focus_to_celestial_focus),
+                sync_demo_globe_earth_night_lights_visibility
+                    .after(spawn_demo_celestial_visuals)
+                    .after(sync_metric_scene_focus_to_celestial_focus),
+                sync_demo_globe_earth_night_lights_material
+                    .after(sync_demo_sun_light)
+                    .after(spawn_demo_celestial_visuals),
                 sync_demo_globe_camera_distance_for_focus
                     .after(sync_metric_scene_focus_to_celestial_focus),
                 h3_demo::log_h3_cell_clicks,
@@ -134,6 +149,10 @@ impl DemoGlobeUiState {
 #[cfg(target_arch = "wasm32")]
 #[derive(Component)]
 struct DemoSunLight;
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Component)]
+struct DemoGlobeEarthNightLightsLayer;
 
 #[cfg(target_arch = "wasm32")]
 fn sync_demo_sun_light(
@@ -540,6 +559,15 @@ pub(crate) fn demo_secondary_globe_body_visibility(body: BodyId, focus: BodyId) 
     }
 }
 
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) fn demo_globe_earth_night_lights_visibility(focus: BodyId) -> Visibility {
+    if focus == BodyId::EARTH {
+        Visibility::Inherited
+    } else {
+        Visibility::Hidden
+    }
+}
+
 #[cfg(target_arch = "wasm32")]
 fn sync_demo_globe_secondary_body_visibility(
     focus: Res<'_, CelestialFocus>,
@@ -547,6 +575,47 @@ fn sync_demo_globe_secondary_body_visibility(
 ) {
     for (body, mut visibility) in &mut bodies {
         *visibility = demo_secondary_globe_body_visibility(body.target, focus.target);
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn sync_demo_globe_earth_night_lights_visibility(
+    focus: Res<'_, CelestialFocus>,
+    mut layers: Query<'_, '_, &mut Visibility, With<DemoGlobeEarthNightLightsLayer>>,
+) {
+    let visibility = demo_globe_earth_night_lights_visibility(focus.target);
+    for mut layer_visibility in &mut layers {
+        *layer_visibility = visibility;
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn sync_demo_globe_earth_night_lights_material(
+    sun_lights: Query<'_, '_, &Transform, With<DemoSunLight>>,
+    night_light_layers: Query<
+        '_,
+        '_,
+        &MeshMaterial3d<DemoSolarEarthNightLightsMaterial>,
+        With<DemoGlobeEarthNightLightsLayer>,
+    >,
+    mut materials: ResMut<'_, Assets<DemoSolarEarthNightLightsMaterial>>,
+) {
+    let Some(sun_direction) = sun_lights
+        .iter()
+        .next()
+        .map(|transform| transform.translation)
+    else {
+        return;
+    };
+
+    for material_handle in &night_light_layers {
+        let Some(material) = materials.get_mut(&material_handle.0) else {
+            continue;
+        };
+        material.params.sun_direction_strength = solar_earth_atmosphere_sun_direction_param(
+            sun_direction,
+            material.params.sun_direction_strength.w,
+        );
     }
 }
 
@@ -561,8 +630,10 @@ pub(crate) fn spawn_demo_celestial_visuals(
     primary_bodies: Query<'_, '_, Entity, With<PrimaryCelestialBody>>,
     mut spawned: ResMut<'_, DemoCelestialVisualsSpawned>,
     focus: Res<'_, CelestialFocus>,
+    asset_server: Res<'_, AssetServer>,
     mut meshes: ResMut<'_, Assets<Mesh>>,
     mut materials: ResMut<'_, Assets<StandardMaterial>>,
+    mut night_light_materials: ResMut<'_, Assets<DemoSolarEarthNightLightsMaterial>>,
 ) {
     if spawned.0 {
         return;
@@ -574,6 +645,8 @@ pub(crate) fn spawn_demo_celestial_visuals(
     let Some(earth) = primary_bodies.iter().next() else {
         return;
     };
+    let earth_night_light_texture: Handle<Image> =
+        asset_server.load(SOLAR_EARTH_NIGHT_LIGHTS_TEXTURE_PATH);
 
     let mut moon_marker_target = None;
     for (index, trek_body) in NasaTrekRegularBody::all().iter().copied().enumerate() {
@@ -628,6 +701,15 @@ pub(crate) fn spawn_demo_celestial_visuals(
         EARTH_MARKER_RADIUS_FACTOR,
         "Earth",
     );
+    spawn_demo_globe_earth_night_lights_layer(
+        &mut commands,
+        &mut meshes,
+        &mut night_light_materials,
+        earth,
+        body_radius_units(&CelestialBody::earth()),
+        earth_night_light_texture,
+        focus.target,
+    );
     if let Some((moon_entity, moon_radius)) = moon_marker_target {
         spawn_body_rotation_markers(
             &mut commands,
@@ -641,6 +723,37 @@ pub(crate) fn spawn_demo_celestial_visuals(
     }
 
     spawned.0 = true;
+}
+
+#[cfg(target_arch = "wasm32")]
+fn spawn_demo_globe_earth_night_lights_layer(
+    commands: &mut Commands<'_, '_>,
+    meshes: &mut Assets<Mesh>,
+    night_light_materials: &mut Assets<DemoSolarEarthNightLightsMaterial>,
+    earth: Entity,
+    earth_radius_units: f32,
+    night_light_texture: Handle<Image>,
+    focus: BodyId,
+) -> Entity {
+    let entity = commands
+        .spawn((
+            Name::new("Ferrisium Earth Night Lights Layer"),
+            DemoGlobeEarthNightLightsLayer,
+            Transform {
+                rotation: earth_equirectangular_overlay_rotation(),
+                scale: Vec3::splat(solar_earth_night_lights_radius_units(earth_radius_units)),
+                ..default()
+            },
+            GlobalTransform::default(),
+            demo_globe_earth_night_lights_visibility(focus),
+            Mesh3d(meshes.add(Sphere::new(1.0).mesh().uv(96, 48))),
+            MeshMaterial3d(
+                night_light_materials.add(solar_earth_night_lights_material(night_light_texture)),
+            ),
+        ))
+        .id();
+    commands.entity(earth).add_child(entity);
+    entity
 }
 
 #[cfg(target_arch = "wasm32")]

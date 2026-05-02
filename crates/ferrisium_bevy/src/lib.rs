@@ -134,8 +134,10 @@ pub use plugin::{FerrisiumPlugin, FerrisiumSet};
 /// Optional skybox resources for globe cameras.
 pub use skybox::{
     DeferredGlobeSkybox, GlobeSkybox, GlobeSkyboxUploadSettings, MilkyWaySkyboxResolution,
-    DEFAULT_GLOBE_SKYBOX_DEFER_FRAMES, DEFAULT_GLOBE_SKYBOX_UPLOAD_IDLE_FRAMES,
-    DEFAULT_MILKY_WAY_SKYBOX_RESOLUTION, FERRISIUM_SKYBOX_ASSET_ROOT,
+    ProgressiveGlobeSkybox, DEFAULT_GLOBE_SKYBOX_DEFER_FRAMES,
+    DEFAULT_GLOBE_SKYBOX_UPLOAD_IDLE_FRAMES, DEFAULT_MILKY_WAY_SKYBOX_RESOLUTION,
+    DEFAULT_PROGRESSIVE_GLOBE_SKYBOX_UPGRADE_SECONDS,
+    DEFAULT_PROGRESSIVE_GLOBE_SKYBOX_UPLOAD_IDLE_FRAMES, FERRISIUM_SKYBOX_ASSET_ROOT,
 };
 /// Active raster tile source used by map, globe, and body-surface systems.
 pub use source::ActiveTileSource;
@@ -183,12 +185,14 @@ pub mod prelude {
         MetricScenePresentationSet, MetricScenePresentationState, MetricSceneSurfaceTarget,
         MetricTrajectory, MetricTrajectoryVisual, MetricVisualObject, MetricVisualRadius,
         MetricVisualRadiusPolicy, MetricVisualRadiusSource, MilkyWaySkyboxResolution, PointerGeo,
-        PointerGeoResource, PrimaryCelestialBody, SharedEphemerisProvider, SphericalSurfaceLayer,
-        SurfaceFrame, TiledBodySurface, TiledBodySurfaceRadiusPolicy,
+        PointerGeoResource, PrimaryCelestialBody, ProgressiveGlobeSkybox, SharedEphemerisProvider,
+        SphericalSurfaceLayer, SurfaceFrame, TiledBodySurface, TiledBodySurfaceRadiusPolicy,
         DEFAULT_CELESTIAL_GRID_CELL_SIZE_KM, DEFAULT_GLOBE_LABEL_FONT_SIZE, DEFAULT_GLOBE_LABEL_Z,
         DEFAULT_GLOBE_LINK_WIDTH_UNITS, DEFAULT_GLOBE_SKYBOX_DEFER_FRAMES,
         DEFAULT_GLOBE_SKYBOX_UPLOAD_IDLE_FRAMES, DEFAULT_MILKY_WAY_SKYBOX_RESOLUTION,
-        FERRISIUM_SKYBOX_ASSET_ROOT, GLOBE_LABEL_RENDER_LAYER,
+        DEFAULT_PROGRESSIVE_GLOBE_SKYBOX_UPGRADE_SECONDS,
+        DEFAULT_PROGRESSIVE_GLOBE_SKYBOX_UPLOAD_IDLE_FRAMES, FERRISIUM_SKYBOX_ASSET_ROOT,
+        GLOBE_LABEL_RENDER_LAYER,
     };
     pub use ferrisium_core::prelude::*;
 }

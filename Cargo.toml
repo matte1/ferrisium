@@ -44,6 +44,7 @@ bevy = { version = "0.18", default-features = false, features = [
     "bevy_camera",
     "bevy_color",
     "bevy_core_pipeline",
+    "bevy_gltf",
     "bevy_image",
     "bevy_light",
     "bevy_log",

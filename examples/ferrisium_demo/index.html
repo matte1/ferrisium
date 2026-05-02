@@ -9,7 +9,19 @@
     <link
       data-trunk
       rel="copy-file"
-      href="../../assets/ferrisium/skyboxes/milkyway_4096.png"
+      href="../../assets/ferrisium/skyboxes/milkyway_512.png"
+      data-target-path="assets/ferrisium/skyboxes"
+    />
+    <link
+      data-trunk
+      rel="copy-file"
+      href="../../assets/ferrisium/skyboxes/milkyway_1024.png"
+      data-target-path="assets/ferrisium/skyboxes"
+    />
+    <link
+      data-trunk
+      rel="copy-file"
+      href="../../assets/ferrisium/skyboxes/milkyway_2048.png"
       data-target-path="assets/ferrisium/skyboxes"
     />
     <title>Ferrisium Demo</title>
@@ -108,6 +120,16 @@
       .solar-control-row label {
         display: block;
         margin: 0;
+      }
+
+      .solar-button-row {
+        display: flex;
+        flex: 0 0 auto;
+        gap: 6px;
+      }
+
+      .solar-button-row button {
+        min-width: 58px;
       }
 
       .hud button {
@@ -272,6 +294,34 @@
           </select>
         </label>
         <div class="solar-control-row">
+          <label for="solar-time-offset">
+            Time <span id="solar-time-value">J2000</span>
+          </label>
+          <div class="solar-button-row">
+            <button id="solar-time-toggle" type="button" title="Play or pause solar time">Play</button>
+            <button id="solar-time-reset" type="button" title="Reset solar time to J2000">J2000</button>
+          </div>
+        </div>
+        <input
+          id="solar-time-offset"
+          type="range"
+          min="-3650"
+          max="3650"
+          step="0.25"
+          value="0"
+          title="Epoch offset from J2000 in days"
+        />
+        <label>
+          Speed
+          <select id="solar-time-speed">
+            <option value="0.041666666666666664">1 hour / second</option>
+            <option value="0.25">6 hours / second</option>
+            <option value="1">1 day / second</option>
+            <option value="7">1 week / second</option>
+            <option value="30">30 days / second</option>
+          </select>
+        </label>
+        <div class="solar-control-row">
           <label for="solar-trail-months">
             Trail <span id="solar-trail-months-value">12 months</span>
           </label>
@@ -288,7 +338,7 @@
         />
       </div>
       <div id="solar-metric-note" class="metric-note">
-        Solar: positions, paths, and body radii are metric; labels and markers are visibility aids.
+        Solar: positions, paths, and body radii are metric; overview locators do not rescale bodies.
       </div>
     </div>
     <aside id="source-panel" class="source-panel" aria-label="Earth tile source">
@@ -329,6 +379,9 @@
       const solarTrailMonthsKey = "ferrisium.solar_trail_months";
       const solarCameraResetKey = "ferrisium.solar_camera_reset";
       const solarFocusKey = "ferrisium.solar_focus";
+      const solarTimeOffsetDaysKey = "ferrisium.solar_time_offset_days";
+      const solarTimeRunningKey = "ferrisium.solar_time_running";
+      const solarTimeSpeedKey = "ferrisium.solar_time_speed_days_per_second";
       const sourceForm = document.getElementById("source-form");
       const sourcePanel = document.getElementById("source-panel");
       const tokenInput = document.getElementById("mapbox-token");
@@ -345,6 +398,11 @@
       const solarTrailMonthsValue = document.getElementById("solar-trail-months-value");
       const solarCameraReset = document.getElementById("solar-camera-reset");
       const solarFocus = document.getElementById("solar-focus");
+      const solarTimeOffset = document.getElementById("solar-time-offset");
+      const solarTimeReset = document.getElementById("solar-time-reset");
+      const solarTimeSpeed = document.getElementById("solar-time-speed");
+      const solarTimeToggle = document.getElementById("solar-time-toggle");
+      const solarTimeValue = document.getElementById("solar-time-value");
       const sourceValues = new Set(
         Array.from(sourceSelect.options).map((option) => option.value),
       );
@@ -358,7 +416,14 @@
       const solarFocusValues = new Set(
         Array.from(solarFocus.options).map((option) => option.value),
       );
+      const solarTimeSpeedValues = new Set(
+        Array.from(solarTimeSpeed.options).map((option) => option.value),
+      );
       const searchParams = new URLSearchParams(window.location.search);
+      const solarEpochOriginMs = Date.UTC(2000, 0, 1, 12, 0, 0);
+      let solarTimeOffsetDays = 0;
+      let solarTimeRunning = false;
+      let solarTimeLastTickMs = window.performance.now();
       function storageGet(key) {
         try {
           return window.localStorage?.getItem(key) ?? null;
@@ -406,6 +471,19 @@
         searchParams.get("focus") ??
         storageGet(solarFocusKey) ??
         "scene";
+      const initialSolarTimeOffsetDays =
+        searchParams.get("solar_days") ??
+        searchParams.get("solar_epoch_days") ??
+        storageGet(solarTimeOffsetDaysKey) ??
+        "0";
+      const initialSolarTimeSpeed =
+        searchParams.get("solar_speed") ??
+        storageGet(solarTimeSpeedKey) ??
+        "7";
+      const initialSolarTimeRunning =
+        searchParams.get("solar_running") ??
+        storageGet(solarTimeRunningKey) ??
+        "false";
 
       function normalizedView(value) {
         const normalized = value.trim().toLowerCase();
@@ -413,6 +491,16 @@
         if (normalized === "2d") return "map";
         if (normalized === "solar-system" || normalized === "orrery") return "solar";
         return normalized;
+      }
+
+      function clampNumber(value, min, max, fallback) {
+        const parsed = Number.parseFloat(value);
+        if (!Number.isFinite(parsed)) return fallback;
+        return Math.min(max, Math.max(min, parsed));
+      }
+
+      function truthy(value) {
+        return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
       }
 
       const selectedView = normalizedView(initialView);
@@ -443,6 +531,20 @@
         ? initialSolarFocus.toLowerCase()
         : "scene";
       storageSet(solarFocusKey, solarFocus.value);
+      solarTimeOffsetDays = clampNumber(
+        initialSolarTimeOffsetDays,
+        Number(solarTimeOffset.min),
+        Number(solarTimeOffset.max),
+        0,
+      );
+      solarTimeRunning = truthy(initialSolarTimeRunning);
+      solarTimeOffset.value = solarTimeOffsetDays.toFixed(2);
+      solarTimeSpeed.value = solarTimeSpeedValues.has(initialSolarTimeSpeed)
+        ? initialSolarTimeSpeed
+        : "7";
+      storageSet(solarTimeOffsetDaysKey, String(solarTimeOffsetDays));
+      storageSet(solarTimeRunningKey, String(solarTimeRunning));
+      storageSet(solarTimeSpeedKey, solarTimeSpeed.value);
 
       viewSelect.addEventListener("change", () => {
         const nextUrl = new URL(window.location.href);
@@ -460,16 +562,55 @@
         window.location.assign(nextUrl.toString());
       });
 
+      function solarTimeDateLabel() {
+        const date = new Date(solarEpochOriginMs + solarTimeOffsetDays * 86_400_000);
+        const isoDate = date.toISOString().slice(0, 10);
+        if (Math.abs(solarTimeOffsetDays) < 0.005) {
+          return `${isoDate} J2000`;
+        }
+        const signedDays =
+          solarTimeOffsetDays > 0
+            ? `+${solarTimeOffsetDays.toFixed(1)}`
+            : solarTimeOffsetDays.toFixed(1);
+        return `${isoDate} (${signedDays} d)`;
+      }
+
+      function syncSolarTimeReadout() {
+        solarTimeValue.textContent = solarTimeDateLabel();
+        solarTimeToggle.textContent = solarTimeRunning ? "Pause" : "Play";
+      }
+
       function updateTimeReadout() {
         if (viewSelect.value === "solar") {
-          timeReadout.textContent = "Epoch: J2000 (fixed)";
+          syncSolarTimeReadout();
+          timeReadout.textContent = `Epoch: ${solarTimeDateLabel()}`;
         } else {
           timeReadout.textContent = `Current time: ${new Date().toISOString()}`;
         }
       }
 
       updateTimeReadout();
-      window.setInterval(updateTimeReadout, 1000);
+      window.setInterval(() => {
+        const nowMs = window.performance.now();
+        const deltaSeconds = (nowMs - solarTimeLastTickMs) / 1000;
+        solarTimeLastTickMs = nowMs;
+
+        if (viewSelect.value === "solar" && solarTimeRunning) {
+          const speedDaysPerSecond = Number.parseFloat(solarTimeSpeed.value);
+          if (Number.isFinite(speedDaysPerSecond)) {
+            solarTimeOffsetDays = clampNumber(
+              solarTimeOffsetDays + speedDaysPerSecond * deltaSeconds,
+              Number(solarTimeOffset.min),
+              Number(solarTimeOffset.max),
+              solarTimeOffsetDays,
+            );
+            solarTimeOffset.value = solarTimeOffsetDays.toFixed(2);
+            storageSet(solarTimeOffsetDaysKey, String(solarTimeOffsetDays));
+          }
+        }
+
+        updateTimeReadout();
+      }, 250);
 
       globeFocus.addEventListener("change", () => {
         storageSet(globeFocusKey, globeFocus.value);
@@ -487,6 +628,35 @@
         nextUrl.searchParams.set("view", "map");
         nextUrl.searchParams.set("map_body", mapBody.value);
         window.location.assign(nextUrl.toString());
+      });
+
+      solarTimeOffset.addEventListener("input", () => {
+        solarTimeOffsetDays = clampNumber(
+          solarTimeOffset.value,
+          Number(solarTimeOffset.min),
+          Number(solarTimeOffset.max),
+          solarTimeOffsetDays,
+        );
+        storageSet(solarTimeOffsetDaysKey, String(solarTimeOffsetDays));
+        updateTimeReadout();
+      });
+
+      solarTimeSpeed.addEventListener("change", () => {
+        storageSet(solarTimeSpeedKey, solarTimeSpeed.value);
+      });
+
+      solarTimeToggle.addEventListener("click", () => {
+        solarTimeRunning = !solarTimeRunning;
+        solarTimeLastTickMs = window.performance.now();
+        storageSet(solarTimeRunningKey, String(solarTimeRunning));
+        updateTimeReadout();
+      });
+
+      solarTimeReset.addEventListener("click", () => {
+        solarTimeOffsetDays = 0;
+        solarTimeOffset.value = "0";
+        storageSet(solarTimeOffsetDaysKey, "0");
+        updateTimeReadout();
       });
 
       solarTrailMonths.addEventListener("input", () => {

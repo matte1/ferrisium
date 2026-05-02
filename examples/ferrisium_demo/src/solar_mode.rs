@@ -3,10 +3,12 @@
 #[cfg(target_arch = "wasm32")]
 use crate::browser_params::browser_local_storage_item;
 #[cfg(target_arch = "wasm32")]
+use crate::demo_config::browser_solar_epoch;
+#[cfg(target_arch = "wasm32")]
 use crate::demo_config::{
     browser_solar_focus_target, browser_solar_trail_months, demo_solar_ambient_fill_light,
-    demo_solar_skybox_config, solar_demo_epoch, solar_dynamic_tile_source_for_focus,
-    solar_focus_metric_target, DemoMode, SOLAR_CAMERA_RESET_STORAGE_KEY,
+    demo_solar_skybox_config, solar_dynamic_tile_source_for_focus, solar_focus_metric_target,
+    DemoMode, SOLAR_CAMERA_RESET_STORAGE_KEY,
 };
 #[cfg(any(target_arch = "wasm32", test))]
 use crate::demo_config::{
@@ -23,18 +25,34 @@ use crate::ephemeris_demo::{
     EARTH_ORBIT_PERIOD_SECONDS, MARS_ORBIT_PERIOD_SECONDS, MERCURY_ORBIT_PERIOD_SECONDS,
     MOON_ORBIT_PERIOD_SECONDS, VENUS_ORBIT_PERIOD_SECONDS,
 };
+#[cfg(any(target_arch = "wasm32", test))]
+use bevy::asset::Asset;
 #[cfg(target_arch = "wasm32")]
 use bevy::asset::RenderAssetUsages;
+#[cfg(target_arch = "wasm32")]
+use bevy::gltf::GltfAssetLabel;
 #[cfg(any(target_arch = "wasm32", test))]
-use bevy::math::DVec3;
+use bevy::math::{DVec3, Mat3};
 #[cfg(target_arch = "wasm32")]
 use bevy::mesh::Indices;
+#[cfg(any(target_arch = "wasm32", test))]
+use bevy::pbr::Material;
+#[cfg(target_arch = "wasm32")]
+use bevy::pbr::MaterialPlugin;
 #[cfg(target_arch = "wasm32")]
 use bevy::prelude::*;
+#[cfg(target_arch = "wasm32")]
+use bevy::prelude::{Alpha, StandardMaterial};
 #[cfg(any(target_arch = "wasm32", test))]
-use bevy::prelude::{Color, Entity, Resource};
+use bevy::prelude::{AlphaMode, Color, Entity, Handle, Image, Quat, Resource, Vec3, Vec4};
+#[cfg(any(target_arch = "wasm32", test))]
+use bevy::reflect::TypePath;
 #[cfg(target_arch = "wasm32")]
 use bevy::render::render_resource::PrimitiveTopology;
+#[cfg(any(target_arch = "wasm32", test))]
+use bevy::render::render_resource::{AsBindGroup, ShaderType};
+#[cfg(any(target_arch = "wasm32", test))]
+use bevy::shader::ShaderRef;
 #[cfg(target_arch = "wasm32")]
 use bevy::sprite::{Anchor, Text2dShadow};
 #[cfg(target_arch = "wasm32")]
@@ -56,9 +74,7 @@ use ferrisium_bevy::{
 #[cfg(any(target_arch = "wasm32", test))]
 use ferrisium_core::prelude::{NasaTrekRegularBody, TileSource};
 #[cfg(target_arch = "wasm32")]
-use ferrisium_core::space::{
-    offset_epoch_seconds, sample_trajectory_between, EphemerisProvider, Kilometers,
-};
+use ferrisium_core::space::{offset_epoch_seconds, sample_trajectory_between, EphemerisProvider};
 #[cfg(any(target_arch = "wasm32", test))]
 use ferrisium_core::space::{
     trajectory_samples_are_stale, BodyId, CelestialBody, Epoch, FrameId, RenderScale, StateVector,
@@ -100,19 +116,65 @@ pub(crate) const SOLAR_CAMERA_LINE_SCROLL_ZOOM_STEP: f64 = 0.16;
 #[cfg(target_arch = "wasm32")]
 pub(crate) const SOLAR_CAMERA_PIXEL_SCROLL_ZOOM_STEP: f64 = 0.0016;
 #[cfg(any(target_arch = "wasm32", test))]
-pub(crate) const SOLAR_SUN_POINT_LIGHT_INTENSITY: f32 = 800_000_000.0;
+pub(crate) const SOLAR_SUN_POINT_LIGHT_INTENSITY: f32 = 1_600_000_000.0;
 #[cfg(any(target_arch = "wasm32", test))]
 pub(crate) const SOLAR_SUN_POINT_LIGHT_RANGE_UNITS: f32 = 1_200.0;
 #[cfg(target_arch = "wasm32")]
-pub(crate) const SOLAR_SUN_POINT_LIGHT_RADIUS_UNITS: f32 = 24.0;
+pub(crate) const SOLAR_BODY_LOCATOR_RADIUS_UNITS: f32 = 1.05;
 #[cfg(target_arch = "wasm32")]
-pub(crate) const SOLAR_BODY_MARKER_RADIUS_UNITS: f32 = 0.9;
+pub(crate) const SOLAR_BODY_LOCATOR_WIDTH_UNITS: f32 = 0.035;
 #[cfg(target_arch = "wasm32")]
 pub(crate) const SOLAR_ORBIT_GUIDE_WIDTH_UNITS: f32 = 0.18;
 #[cfg(target_arch = "wasm32")]
 pub(crate) const SOLAR_ORBIT_TRAIL_WIDTH_UNITS: f32 = 0.50;
 #[cfg(any(target_arch = "wasm32", test))]
 pub(crate) const SOLAR_BODY_FOCUS_DISTANCE_UNITS: f64 = 36.0;
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_EARTH_ATMOSPHERE_SHADER_PATH: &str = "shaders/solar_earth_atmosphere.wgsl";
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_EARTH_ATMOSPHERE_RADIUS_FACTOR: f32 = 1.010;
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_EARTH_ATMOSPHERE_RAYLEIGH_ALPHA: f32 = 0.34;
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_EARTH_ATMOSPHERE_TERMINATOR_ALPHA: f32 = 0.13;
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_EARTH_ATMOSPHERE_NIGHT_ALPHA: f32 = 0.012;
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_EARTH_ATMOSPHERE_FRESNEL_POWER: f32 = 4.8;
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_EARTH_ATMOSPHERE_DISK_ALPHA: f32 = 0.0;
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_EARTH_ATMOSPHERE_MAX_ALPHA: f32 = 0.34;
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_EARTH_CLOUDS_SHADER_PATH: &str = "shaders/solar_earth_clouds.wgsl";
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_EARTH_CLOUDS_TEXTURE_PATH: &str = "textures/earth_clouds_2048.jpg";
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_EARTH_CLOUDS_RADIUS_FACTOR: f32 = 1.004;
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_EARTH_CLOUDS_MAX_ALPHA: f32 = 0.28;
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_EARTH_CLOUDS_MASK_THRESHOLD: f32 = 0.30;
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_EARTH_CLOUDS_MASK_SOFTNESS: f32 = 0.36;
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_EARTH_CLOUDS_NIGHT_ALPHA_FACTOR: f32 = 0.04;
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_EARTH_NIGHT_LIGHTS_SHADER_PATH: &str =
+    "shaders/solar_earth_night_lights.wgsl";
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_EARTH_NIGHT_LIGHTS_TEXTURE_PATH: &str =
+    "textures/earth_night_lights_2048.jpg";
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_EARTH_NIGHT_LIGHTS_RADIUS_FACTOR: f32 = 1.002;
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_EARTH_NIGHT_LIGHTS_MAX_ALPHA: f32 = 0.95;
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_EARTH_NIGHT_LIGHTS_MASK_THRESHOLD: f32 = 0.025;
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_EARTH_NIGHT_LIGHTS_MASK_SOFTNESS: f32 = 0.28;
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_EARTH_NIGHT_LIGHTS_TERMINATOR_FADE: f32 = 0.18;
 #[cfg(any(target_arch = "wasm32", test))]
 pub(crate) const SOLAR_SURFACE_LOD_DISTANCE_RADIUS_FACTOR: f64 = 3.0;
 #[cfg(any(target_arch = "wasm32", test))]
@@ -134,68 +196,78 @@ pub(crate) const SOLAR_REFERENCE_GRID_RING_RADII_KM: [f64; 4] = [
     1.5 * SOLAR_AU_KM,
     2.0 * SOLAR_AU_KM,
 ];
-#[cfg(target_arch = "wasm32")]
-pub(crate) const SOLAR_SUN_GLOW_RADII_UNITS: [f32; 3] = [7.0, 15.0, 30.0];
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_NASA_SUN_MODEL_ASSET_PATH: &str = "models/nasa_sun.glb";
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const SOLAR_NASA_SUN_MODEL_SOURCE_RADIUS_UNITS: f32 = 500.0;
 #[cfg(target_arch = "wasm32")]
 pub(crate) const SOLAR_ORBIT_SAMPLES: usize = 384;
 
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn configure_solar_system_mode(app: &mut App) {
-    let epoch = solar_demo_epoch();
-    app.insert_resource(CelestialSpace::new(
-        SOLAR_GRID_CELL_SIZE_KM,
-        RenderScale::from_kilometers_per_unit(SOLAR_RENDER_KILOMETERS_PER_UNIT),
-    ))
-    .insert_resource(CelestialEpoch::new(epoch))
-    .insert_resource(default_solar_camera_state())
-    .insert_resource(solar_camera_settings())
-    .insert_resource(DemoSolarTrailWindow::new(browser_solar_trail_months()))
-    .insert_resource(DemoSolarFocusSelection::new(browser_solar_focus_target()))
-    .insert_resource(MetricSceneFocusSelection::new(solar_focus_metric_target(
-        browser_solar_focus_target(),
-    )))
-    .insert_resource(DemoSolarUiState::default())
-    .insert_resource(CelestialEphemeris::from_provider(
-        DemoEphemerisProvider::default(),
-    ))
-    .insert_resource(demo_solar_skybox_config().deferred())
-    .insert_resource(demo_solar_ambient_fill_light())
-    .init_resource::<DemoAniseKernelLoader>()
-    .init_resource::<DemoSolarOrbitPathEntities>()
-    .add_systems(Startup, setup_solar_system)
-    .add_systems(
-        Update,
-        (
-            sync_solar_ui_controls
-                .before(sync_metric_scene_focus_to_celestial_focus)
-                .before(sync_metric_scene_focus_pivot),
-            sync_solar_active_tile_source.after(sync_solar_ui_controls),
-            sync_demo_anise_kernel_bundle,
-            sync_solar_camera_focus
-                .after(sync_metric_scene_focus_pivot)
-                .after(sync_demo_anise_kernel_bundle)
-                .after(sync_solar_ui_controls),
-            sync_solar_camera_constraints
-                .after(sync_metric_scene_focus_pivot)
-                .after(sync_solar_ui_controls)
-                .before(handle_metric_orbit_camera_input),
-            handle_metric_orbit_camera_input.after(sync_solar_camera_focus),
-            sync_metric_orbit_camera
-                .after(handle_metric_orbit_camera_input)
-                .after(sync_solar_ui_controls),
-            sync_solar_dynamic_body_surface_view
-                .after(sync_metric_orbit_camera)
-                .after(sync_metric_scene_focus_pivot)
-                .after(sync_solar_ui_controls),
-            sync_demo_solar_orbit_paths
-                .after(sync_demo_anise_kernel_bundle)
-                .after(sync_solar_ui_controls),
-            sync_solar_overview_aids_visibility
-                .after(sync_solar_ui_controls)
-                .after(sync_demo_solar_orbit_paths),
-            sync_solar_labels.after(sync_metric_orbit_camera),
-        ),
-    );
+    let epoch = browser_solar_epoch();
+    app.add_plugins(MaterialPlugin::<DemoSolarEarthAtmosphereMaterial>::default())
+        .add_plugins(MaterialPlugin::<DemoSolarEarthCloudMaterial>::default())
+        .add_plugins(MaterialPlugin::<DemoSolarEarthNightLightsMaterial>::default())
+        .insert_resource(CelestialSpace::new(
+            SOLAR_GRID_CELL_SIZE_KM,
+            RenderScale::from_kilometers_per_unit(SOLAR_RENDER_KILOMETERS_PER_UNIT),
+        ))
+        .insert_resource(CelestialEpoch::new(epoch))
+        .insert_resource(default_solar_camera_state())
+        .insert_resource(solar_camera_settings())
+        .insert_resource(DemoSolarTrailWindow::new(browser_solar_trail_months()))
+        .insert_resource(DemoSolarFocusSelection::new(browser_solar_focus_target()))
+        .insert_resource(DemoSolarFocusPivotTracker::default())
+        .insert_resource(MetricSceneFocusSelection::new(solar_focus_metric_target(
+            browser_solar_focus_target(),
+        )))
+        .insert_resource(DemoSolarUiState::default())
+        .insert_resource(CelestialEphemeris::from_provider(
+            DemoEphemerisProvider::default(),
+        ))
+        .insert_resource(demo_solar_skybox_config())
+        .insert_resource(demo_solar_ambient_fill_light())
+        .init_resource::<DemoAniseKernelLoader>()
+        .init_resource::<DemoSolarOrbitPathEntities>()
+        .add_systems(Startup, setup_solar_system)
+        .add_systems(
+            Update,
+            (
+                sync_solar_ui_controls
+                    .before(sync_metric_scene_focus_to_celestial_focus)
+                    .before(sync_metric_scene_focus_pivot),
+                sync_solar_active_tile_source.after(sync_solar_ui_controls),
+                sync_demo_anise_kernel_bundle,
+                sync_solar_camera_focus
+                    .after(sync_metric_scene_focus_pivot)
+                    .after(sync_demo_anise_kernel_bundle)
+                    .after(sync_solar_ui_controls),
+                sync_solar_camera_constraints
+                    .after(sync_metric_scene_focus_pivot)
+                    .after(sync_solar_ui_controls)
+                    .before(handle_metric_orbit_camera_input),
+                handle_metric_orbit_camera_input.after(sync_solar_camera_focus),
+                sync_metric_orbit_camera
+                    .after(handle_metric_orbit_camera_input)
+                    .after(sync_solar_ui_controls),
+                sync_solar_dynamic_body_surface_view
+                    .after(sync_metric_orbit_camera)
+                    .after(sync_metric_scene_focus_pivot)
+                    .after(sync_solar_ui_controls),
+                sync_demo_solar_orbit_paths
+                    .after(sync_demo_anise_kernel_bundle)
+                    .after(sync_solar_ui_controls),
+                sync_solar_overview_aids_visibility
+                    .after(sync_solar_ui_controls)
+                    .after(sync_demo_solar_orbit_paths),
+                sync_solar_sun_model_material,
+                sync_solar_earth_night_lights_material,
+                sync_solar_earth_cloud_material,
+                sync_solar_earth_atmosphere_material,
+                sync_solar_labels.after(sync_metric_orbit_camera),
+            ),
+        );
 }
 
 #[cfg(any(target_arch = "wasm32", test))]
@@ -253,6 +325,140 @@ pub(crate) const fn solar_tiled_body_fallback_color(body: DemoSolarTexturedBody)
 #[cfg(target_arch = "wasm32")]
 #[derive(Component)]
 struct DemoSolarSun;
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Component)]
+struct DemoSolarEarth;
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Component)]
+struct DemoSolarEarthAtmosphereLayer;
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Component)]
+struct DemoSolarEarthCloudLayer;
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Component)]
+struct DemoSolarEarthNightLightsLayer;
+
+#[cfg(any(target_arch = "wasm32", test))]
+#[derive(Asset, AsBindGroup, TypePath, Debug, Clone)]
+pub(crate) struct DemoSolarEarthAtmosphereMaterial {
+    #[uniform(0)]
+    pub(crate) params: DemoSolarEarthAtmosphereUniform,
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+impl Material for DemoSolarEarthAtmosphereMaterial {
+    fn fragment_shader() -> ShaderRef {
+        SOLAR_EARTH_ATMOSPHERE_SHADER_PATH.into()
+    }
+
+    fn alpha_mode(&self) -> AlphaMode {
+        AlphaMode::Premultiplied
+    }
+
+    fn enable_prepass() -> bool {
+        false
+    }
+
+    fn enable_shadows() -> bool {
+        false
+    }
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+#[derive(Debug, Clone, Copy, ShaderType)]
+pub(crate) struct DemoSolarEarthAtmosphereUniform {
+    pub(crate) sun_direction_strength: Vec4,
+    pub(crate) rayleigh_color_alpha: Vec4,
+    pub(crate) terminator_color_alpha: Vec4,
+    pub(crate) night_color_alpha: Vec4,
+    pub(crate) falloff: Vec4,
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+#[derive(Asset, AsBindGroup, TypePath, Debug, Clone)]
+pub(crate) struct DemoSolarEarthCloudMaterial {
+    #[uniform(0)]
+    pub(crate) params: DemoSolarEarthCloudUniform,
+    #[texture(1)]
+    #[sampler(2)]
+    pub(crate) cloud_texture: Handle<Image>,
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+impl Material for DemoSolarEarthCloudMaterial {
+    fn fragment_shader() -> ShaderRef {
+        SOLAR_EARTH_CLOUDS_SHADER_PATH.into()
+    }
+
+    fn alpha_mode(&self) -> AlphaMode {
+        AlphaMode::Premultiplied
+    }
+
+    fn enable_prepass() -> bool {
+        false
+    }
+
+    fn enable_shadows() -> bool {
+        false
+    }
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+#[derive(Debug, Clone, Copy, ShaderType)]
+pub(crate) struct DemoSolarEarthCloudUniform {
+    pub(crate) sun_direction_strength: Vec4,
+    pub(crate) cloud_color_alpha: Vec4,
+    pub(crate) mask_params: Vec4,
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+#[derive(Asset, AsBindGroup, TypePath, Debug, Clone)]
+pub(crate) struct DemoSolarEarthNightLightsMaterial {
+    #[uniform(0)]
+    pub(crate) params: DemoSolarEarthNightLightsUniform,
+    #[texture(1)]
+    #[sampler(2)]
+    pub(crate) light_texture: Handle<Image>,
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+impl Material for DemoSolarEarthNightLightsMaterial {
+    fn fragment_shader() -> ShaderRef {
+        SOLAR_EARTH_NIGHT_LIGHTS_SHADER_PATH.into()
+    }
+
+    fn alpha_mode(&self) -> AlphaMode {
+        AlphaMode::Add
+    }
+
+    fn enable_prepass() -> bool {
+        false
+    }
+
+    fn enable_shadows() -> bool {
+        false
+    }
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+#[derive(Debug, Clone, Copy, ShaderType)]
+pub(crate) struct DemoSolarEarthNightLightsUniform {
+    pub(crate) sun_direction_strength: Vec4,
+    pub(crate) light_color_alpha: Vec4,
+    pub(crate) mask_params: Vec4,
+}
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Resource)]
+struct DemoSolarSunModelMaterial {
+    handle: Handle<StandardMaterial>,
+    texture: Handle<Image>,
+    applied: bool,
+}
 
 #[cfg(target_arch = "wasm32")]
 #[derive(Component)]
@@ -331,6 +537,13 @@ impl DemoSolarFocusSelection {
 }
 
 #[cfg(target_arch = "wasm32")]
+#[derive(Resource, Debug, Default, Clone, Copy, PartialEq)]
+struct DemoSolarFocusPivotTracker {
+    target: Option<DemoSolarFocusTarget>,
+    pivot_units: Option<DVec3>,
+}
+
+#[cfg(target_arch = "wasm32")]
 #[derive(Resource, Debug, Default, Clone)]
 struct DemoSolarUiState {
     reset_token: Option<String>,
@@ -344,6 +557,17 @@ struct DemoSolarLabel {
 }
 
 #[cfg(target_arch = "wasm32")]
+struct DemoSolarEarthPresentationAssets<'a> {
+    meshes: &'a mut Assets<Mesh>,
+    materials: &'a mut Assets<StandardMaterial>,
+    atmosphere_materials: &'a mut Assets<DemoSolarEarthAtmosphereMaterial>,
+    cloud_materials: &'a mut Assets<DemoSolarEarthCloudMaterial>,
+    night_light_materials: &'a mut Assets<DemoSolarEarthNightLightsMaterial>,
+    cloud_texture: Handle<Image>,
+    night_light_texture: Handle<Image>,
+}
+
+#[cfg(target_arch = "wasm32")]
 #[allow(
     clippy::too_many_arguments,
     clippy::too_many_lines,
@@ -354,8 +578,12 @@ pub(crate) fn setup_solar_system(
     active_source: Res<'_, ActiveTileSource>,
     celestial_space: Res<'_, CelestialSpace>,
     camera_state: Res<'_, MetricOrbitCameraState>,
+    asset_server: Res<'_, AssetServer>,
     mut meshes: ResMut<'_, Assets<Mesh>>,
     mut materials: ResMut<'_, Assets<StandardMaterial>>,
+    mut atmosphere_materials: ResMut<'_, Assets<DemoSolarEarthAtmosphereMaterial>>,
+    mut cloud_materials: ResMut<'_, Assets<DemoSolarEarthCloudMaterial>>,
+    mut night_light_materials: ResMut<'_, Assets<DemoSolarEarthNightLightsMaterial>>,
 ) {
     let camera_position = camera_state.position_units();
     let camera_placement = celestial_space.place_position_units(camera_position);
@@ -366,6 +594,25 @@ pub(crate) fn setup_solar_system(
         .looking_to(camera_look_direction, Vec3::Y);
     let reference_grid_mesh = meshes.add(solar_reference_grid_mesh(*celestial_space));
     let reference_grid_material = materials.add(solar_reference_grid_material());
+    let sun_model_scene =
+        asset_server.load(GltfAssetLabel::Scene(0).from_asset(SOLAR_NASA_SUN_MODEL_ASSET_PATH));
+    let sun_model_material: Handle<StandardMaterial> = asset_server.load(
+        GltfAssetLabel::Material {
+            index: 0,
+            is_scale_inverted: false,
+        }
+        .from_asset(SOLAR_NASA_SUN_MODEL_ASSET_PATH),
+    );
+    let sun_model_texture: Handle<Image> =
+        asset_server.load(GltfAssetLabel::Texture(0).from_asset(SOLAR_NASA_SUN_MODEL_ASSET_PATH));
+    let earth_cloud_texture: Handle<Image> = asset_server.load(SOLAR_EARTH_CLOUDS_TEXTURE_PATH);
+    let earth_night_light_texture: Handle<Image> =
+        asset_server.load(SOLAR_EARTH_NIGHT_LIGHTS_TEXTURE_PATH);
+    commands.insert_resource(DemoSolarSunModelMaterial {
+        handle: sun_model_material,
+        texture: sun_model_texture,
+        applied: false,
+    });
     let mut labeled_bodies = Vec::new();
     let mut sun_entity = None;
     let mut earth_entity = None;
@@ -445,6 +692,7 @@ pub(crate) fn setup_solar_system(
         let earth = root
             .spawn_spatial((
                 Name::new("Solar System Earth"),
+                DemoSolarEarth,
                 MetricSceneBodyAnchorBundle::relative_to(
                     earth_body.clone(),
                     BodyId::SUN,
@@ -531,13 +779,11 @@ pub(crate) fn setup_solar_system(
     });
 
     if let Some(sun) = sun_entity {
-        let sun_body_layer = spawn_solar_body_visual_layer(
+        let sun_body_layer = spawn_solar_sun_model_layer(
             &mut commands,
             sun,
-            BodyId::SUN,
-            "Solar System Sun Body Layer",
-            MetricScenePresentationSet::body_and_surface(),
-            solar_body_visual(CelestialBody::sun(), 0.0, Color::srgb(1.0, 0.72, 0.25)).emissive(),
+            sun_model_scene,
+            solar_body_radius_units(&CelestialBody::sun()),
         );
         commands.entity(sun_body_layer).insert(DemoSolarSun);
         spawn_solar_reference_grid(
@@ -546,15 +792,23 @@ pub(crate) fn setup_solar_system(
             reference_grid_mesh,
             reference_grid_material,
         );
-        spawn_solar_sun_glow(&mut commands, sun, &mut meshes, &mut materials);
+        spawn_solar_sun_light(&mut commands, sun);
     }
     if let Some(earth) = earth_entity {
+        let mut earth_assets = DemoSolarEarthPresentationAssets {
+            meshes: &mut meshes,
+            materials: &mut materials,
+            atmosphere_materials: &mut atmosphere_materials,
+            cloud_materials: &mut cloud_materials,
+            night_light_materials: &mut night_light_materials,
+            cloud_texture: earth_cloud_texture,
+            night_light_texture: earth_night_light_texture,
+        };
         spawn_solar_earth_presentation_layers(
             &mut commands,
             earth,
             &active_source.0,
-            &mut meshes,
-            &mut materials,
+            &mut earth_assets,
         );
     }
     for (parent, body, celestial_body) in tiled_body_presentations {
@@ -584,18 +838,45 @@ pub(crate) fn setup_solar_system(
 }
 
 #[cfg(target_arch = "wasm32")]
-fn spawn_solar_body_visual_layer(
+fn spawn_solar_sun_model_layer(
+    commands: &mut Commands<'_, '_>,
+    parent: Entity,
+    scene: Handle<Scene>,
+    radius_units: f32,
+) -> Entity {
+    let mut layer = MetricScenePresentationLayerBundle::for_object_set(
+        BodyId::SUN,
+        MetricScenePresentationSet::all(),
+    );
+    layer.transform =
+        Transform::from_scale(Vec3::splat(solar_nasa_sun_model_scale_units(radius_units)));
+    let entity = commands
+        .spawn((
+            Name::new("Solar System NASA Sun Model Layer"),
+            layer,
+            SceneRoot(scene),
+        ))
+        .id();
+    commands.entity(parent).add_child(entity);
+    entity
+}
+
+#[cfg(target_arch = "wasm32")]
+fn spawn_solar_locator_layer(
     commands: &mut Commands<'_, '_>,
     parent: Entity,
     body: BodyId,
     name: &'static str,
-    presentations: MetricScenePresentationSet,
-    visual: MetricVisualObject,
+    color: Color,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
 ) -> Entity {
     let entity = commands
         .spawn((
             Name::new(name),
-            MetricSceneBodyVisualLayerBundle::for_object_set(body, presentations, visual),
+            MetricScenePresentationLayerBundle::for_object(body, MetricScenePresentation::Marker),
+            Mesh3d(meshes.add(solar_locator_mesh())),
+            MeshMaterial3d(materials.add(solar_locator_material(color))),
         ))
         .id();
     commands.entity(parent).add_child(entity);
@@ -636,24 +917,21 @@ fn spawn_solar_tiled_body_presentation_layers(
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
 ) {
-    let marker_color = match body {
+    let locator_color = match body {
         DemoSolarTexturedBody::Mercury => Color::srgb(0.72, 0.78, 0.86),
         DemoSolarTexturedBody::Venus => Color::srgb(1.0, 0.78, 0.42),
         DemoSolarTexturedBody::Earth => Color::srgb(0.44, 0.72, 1.0),
         DemoSolarTexturedBody::Moon => Color::srgb(0.82, 0.82, 0.78),
         DemoSolarTexturedBody::Mars => Color::srgb(1.0, 0.43, 0.28),
     };
-    spawn_solar_body_visual_layer(
+    spawn_solar_locator_layer(
         commands,
         parent,
         celestial_body.id,
-        "Solar System Tiled Body Marker Layer",
-        MetricScenePresentationSet::only(MetricScenePresentation::Marker),
-        MetricVisualObject::point(
-            MetricVisualRadiusPolicy::minimum(SOLAR_BODY_MARKER_RADIUS_UNITS),
-            marker_color,
-        )
-        .emissive(),
+        "Solar System Body Locator Layer",
+        locator_color,
+        meshes,
+        materials,
     );
 
     spawn_solar_tiled_body_fallback_layer(
@@ -684,20 +962,16 @@ fn spawn_solar_earth_presentation_layers(
     commands: &mut Commands<'_, '_>,
     earth: Entity,
     active_source: &TileSource,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
+    assets: &mut DemoSolarEarthPresentationAssets<'_>,
 ) {
-    spawn_solar_body_visual_layer(
+    spawn_solar_locator_layer(
         commands,
         earth,
         BodyId::EARTH,
-        "Solar System Earth Marker Layer",
-        MetricScenePresentationSet::only(MetricScenePresentation::Marker),
-        MetricVisualObject::point(
-            MetricVisualRadiusPolicy::minimum(SOLAR_BODY_MARKER_RADIUS_UNITS),
-            Color::srgb(0.44, 0.72, 1.0),
-        )
-        .emissive(),
+        "Solar System Earth Locator Layer",
+        Color::srgb(0.44, 0.72, 1.0),
+        &mut *assets.meshes,
+        &mut *assets.materials,
     );
 
     spawn_solar_tiled_body_fallback_layer(
@@ -707,8 +981,8 @@ fn spawn_solar_earth_presentation_layers(
         "Solar System Earth Fallback Layer",
         solar_body_radius_units(&CelestialBody::earth()),
         solar_tiled_body_fallback_color(DemoSolarTexturedBody::Earth),
-        meshes,
-        materials,
+        &mut *assets.meshes,
+        &mut *assets.materials,
     );
 
     let (earth_surface, earth_radius_policy) =
@@ -722,6 +996,117 @@ fn spawn_solar_earth_presentation_layers(
         earth_surface,
         Some(earth_radius_policy),
     );
+
+    spawn_solar_earth_night_lights_layer(
+        commands,
+        earth,
+        &mut *assets.meshes,
+        &mut *assets.night_light_materials,
+        assets.night_light_texture.clone(),
+    );
+    spawn_solar_earth_cloud_layer(
+        commands,
+        earth,
+        &mut *assets.meshes,
+        &mut *assets.cloud_materials,
+        assets.cloud_texture.clone(),
+    );
+    spawn_solar_earth_atmosphere_layer(
+        commands,
+        earth,
+        &mut *assets.meshes,
+        &mut *assets.atmosphere_materials,
+    );
+}
+
+#[cfg(target_arch = "wasm32")]
+fn spawn_solar_earth_cloud_layer(
+    commands: &mut Commands<'_, '_>,
+    earth: Entity,
+    meshes: &mut Assets<Mesh>,
+    cloud_materials: &mut Assets<DemoSolarEarthCloudMaterial>,
+    cloud_texture: Handle<Image>,
+) -> Entity {
+    let mut layer = MetricScenePresentationLayerBundle::for_object(
+        BodyId::EARTH,
+        MetricScenePresentation::Body,
+    );
+    let earth_radius_units = solar_body_radius_units(&CelestialBody::earth());
+    layer.transform =
+        earth_equirectangular_overlay_transform(solar_earth_cloud_radius_units(earth_radius_units));
+
+    let entity = commands
+        .spawn((
+            Name::new("Solar System Earth Cloud Layer"),
+            DemoSolarEarthCloudLayer,
+            layer,
+            Mesh3d(meshes.add(Sphere::new(1.0).mesh().uv(96, 48))),
+            MeshMaterial3d(cloud_materials.add(solar_earth_cloud_material(cloud_texture))),
+        ))
+        .id();
+    commands.entity(earth).add_child(entity);
+    entity
+}
+
+#[cfg(target_arch = "wasm32")]
+fn spawn_solar_earth_night_lights_layer(
+    commands: &mut Commands<'_, '_>,
+    earth: Entity,
+    meshes: &mut Assets<Mesh>,
+    night_light_materials: &mut Assets<DemoSolarEarthNightLightsMaterial>,
+    night_light_texture: Handle<Image>,
+) -> Entity {
+    let mut layer = MetricScenePresentationLayerBundle::for_object(
+        BodyId::EARTH,
+        MetricScenePresentation::Body,
+    );
+    let earth_radius_units = solar_body_radius_units(&CelestialBody::earth());
+    layer.transform = earth_equirectangular_overlay_transform(
+        solar_earth_night_lights_radius_units(earth_radius_units),
+    );
+
+    let entity = commands
+        .spawn((
+            Name::new("Solar System Earth Night Lights Layer"),
+            DemoSolarEarthNightLightsLayer,
+            layer,
+            Mesh3d(meshes.add(Sphere::new(1.0).mesh().uv(96, 48))),
+            MeshMaterial3d(
+                night_light_materials.add(solar_earth_night_lights_material(night_light_texture)),
+            ),
+        ))
+        .id();
+    commands.entity(earth).add_child(entity);
+    entity
+}
+
+#[cfg(target_arch = "wasm32")]
+fn spawn_solar_earth_atmosphere_layer(
+    commands: &mut Commands<'_, '_>,
+    earth: Entity,
+    meshes: &mut Assets<Mesh>,
+    atmosphere_materials: &mut Assets<DemoSolarEarthAtmosphereMaterial>,
+) -> Entity {
+    let mut layer = MetricScenePresentationLayerBundle::for_object(
+        BodyId::EARTH,
+        MetricScenePresentation::Body,
+    );
+    let earth_radius_units = solar_body_radius_units(&CelestialBody::earth());
+    layer.transform = Transform::from_scale(Vec3::splat(solar_earth_atmosphere_radius_units(
+        earth_radius_units,
+    )));
+
+    let entity = commands
+        .spawn((
+            Name::new("Solar System Earth Atmosphere Layer"),
+            DemoSolarEarthAtmosphereLayer,
+            layer,
+            Mesh3d(meshes.add(Sphere::new(1.0).mesh().uv(64, 32))),
+            MeshMaterial3d(atmosphere_materials.add(solar_earth_atmosphere_material())),
+        ))
+        .id();
+    commands.entity(earth).add_child(entity);
+    entity
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -759,6 +1144,232 @@ fn spawn_solar_tiled_body_fallback_layer(
         .id();
     commands.entity(parent).add_child(entity);
     entity
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) fn solar_earth_atmosphere_radius_units(earth_radius_units: f32) -> f32 {
+    earth_radius_units * SOLAR_EARTH_ATMOSPHERE_RADIUS_FACTOR
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) fn solar_earth_cloud_radius_units(earth_radius_units: f32) -> f32 {
+    earth_radius_units * SOLAR_EARTH_CLOUDS_RADIUS_FACTOR
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) fn solar_earth_night_lights_radius_units(earth_radius_units: f32) -> f32 {
+    earth_radius_units * SOLAR_EARTH_NIGHT_LIGHTS_RADIUS_FACTOR
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) fn earth_equirectangular_overlay_rotation() -> Quat {
+    Quat::from_mat3(&Mat3::from_cols(Vec3::NEG_Z, Vec3::NEG_X, Vec3::Y))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn earth_equirectangular_overlay_transform(radius_units: f32) -> Transform {
+    Transform {
+        rotation: earth_equirectangular_overlay_rotation(),
+        scale: Vec3::splat(radius_units),
+        ..default()
+    }
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) fn solar_earth_atmosphere_material() -> DemoSolarEarthAtmosphereMaterial {
+    DemoSolarEarthAtmosphereMaterial {
+        params: DemoSolarEarthAtmosphereUniform {
+            sun_direction_strength: solar_earth_atmosphere_sun_direction_param(Vec3::X, 1.0),
+            rayleigh_color_alpha: Vec4::new(0.30, 0.62, 1.0, SOLAR_EARTH_ATMOSPHERE_RAYLEIGH_ALPHA),
+            terminator_color_alpha: Vec4::new(
+                1.0,
+                0.50,
+                0.18,
+                SOLAR_EARTH_ATMOSPHERE_TERMINATOR_ALPHA,
+            ),
+            night_color_alpha: Vec4::new(0.08, 0.25, 0.70, SOLAR_EARTH_ATMOSPHERE_NIGHT_ALPHA),
+            falloff: Vec4::new(
+                SOLAR_EARTH_ATMOSPHERE_FRESNEL_POWER,
+                SOLAR_EARTH_ATMOSPHERE_DISK_ALPHA,
+                SOLAR_EARTH_ATMOSPHERE_MAX_ALPHA,
+                0.0,
+            ),
+        },
+    }
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) fn solar_earth_cloud_material(
+    cloud_texture: Handle<Image>,
+) -> DemoSolarEarthCloudMaterial {
+    DemoSolarEarthCloudMaterial {
+        params: DemoSolarEarthCloudUniform {
+            sun_direction_strength: solar_earth_atmosphere_sun_direction_param(Vec3::X, 1.0),
+            cloud_color_alpha: Vec4::new(0.92, 0.96, 1.0, SOLAR_EARTH_CLOUDS_MAX_ALPHA),
+            mask_params: Vec4::new(
+                SOLAR_EARTH_CLOUDS_MASK_THRESHOLD,
+                SOLAR_EARTH_CLOUDS_MASK_SOFTNESS,
+                SOLAR_EARTH_CLOUDS_NIGHT_ALPHA_FACTOR,
+                0.0,
+            ),
+        },
+        cloud_texture,
+    }
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) fn solar_earth_night_lights_material(
+    light_texture: Handle<Image>,
+) -> DemoSolarEarthNightLightsMaterial {
+    DemoSolarEarthNightLightsMaterial {
+        params: DemoSolarEarthNightLightsUniform {
+            sun_direction_strength: solar_earth_atmosphere_sun_direction_param(Vec3::X, 1.0),
+            light_color_alpha: Vec4::new(1.0, 0.68, 0.34, SOLAR_EARTH_NIGHT_LIGHTS_MAX_ALPHA),
+            mask_params: Vec4::new(
+                SOLAR_EARTH_NIGHT_LIGHTS_MASK_THRESHOLD,
+                SOLAR_EARTH_NIGHT_LIGHTS_MASK_SOFTNESS,
+                SOLAR_EARTH_NIGHT_LIGHTS_TERMINATOR_FADE,
+                0.0,
+            ),
+        },
+        light_texture,
+    }
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) fn solar_earth_atmosphere_sun_direction_param(
+    sun_direction: Vec3,
+    strength: f32,
+) -> Vec4 {
+    let normalized = if sun_direction.length_squared() > f32::EPSILON {
+        sun_direction.normalize()
+    } else {
+        Vec3::X
+    };
+    normalized.extend(strength)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn solar_locator_material(color: Color) -> StandardMaterial {
+    StandardMaterial {
+        base_color: color.with_alpha(0.52),
+        emissive: color.with_alpha(0.92).into(),
+        alpha_mode: AlphaMode::Add,
+        cull_mode: None,
+        unlit: true,
+        ..default()
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn solar_locator_mesh() -> Mesh {
+    let mut positions = Vec::new();
+    let mut normals = Vec::new();
+    let mut uvs = Vec::new();
+    let mut indices = Vec::new();
+
+    append_solar_locator_ring(
+        SolarLocatorPlane::Xy,
+        &mut positions,
+        &mut normals,
+        &mut uvs,
+        &mut indices,
+    );
+    append_solar_locator_ring(
+        SolarLocatorPlane::Xz,
+        &mut positions,
+        &mut normals,
+        &mut uvs,
+        &mut indices,
+    );
+    append_solar_locator_ring(
+        SolarLocatorPlane::Yz,
+        &mut positions,
+        &mut normals,
+        &mut uvs,
+        &mut indices,
+    );
+
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+    );
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    mesh.insert_indices(Indices::U32(indices));
+    mesh
+}
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Debug, Clone, Copy)]
+enum SolarLocatorPlane {
+    Xy,
+    Xz,
+    Yz,
+}
+
+#[cfg(target_arch = "wasm32")]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    reason = "Locator rings are tiny fixed presentation meshes."
+)]
+fn append_solar_locator_ring(
+    plane: SolarLocatorPlane,
+    positions: &mut Vec<[f32; 3]>,
+    normals: &mut Vec<[f32; 3]>,
+    uvs: &mut Vec<[f32; 2]>,
+    indices: &mut Vec<u32>,
+) {
+    const SEGMENTS: usize = 72;
+    let half_width = SOLAR_BODY_LOCATOR_WIDTH_UNITS * 0.5;
+    let inner_radius = (SOLAR_BODY_LOCATOR_RADIUS_UNITS - half_width).max(0.01);
+    let outer_radius = SOLAR_BODY_LOCATOR_RADIUS_UNITS + half_width;
+
+    for index in 0..SEGMENTS {
+        let angle0 = std::f32::consts::TAU * index as f32 / SEGMENTS as f32;
+        let angle1 = std::f32::consts::TAU * (index + 1) as f32 / SEGMENTS as f32;
+        let Ok(base_index) = u32::try_from(positions.len()) else {
+            return;
+        };
+
+        positions.extend_from_slice(&[
+            solar_locator_point(plane, outer_radius, angle0).to_array(),
+            solar_locator_point(plane, inner_radius, angle0).to_array(),
+            solar_locator_point(plane, outer_radius, angle1).to_array(),
+            solar_locator_point(plane, inner_radius, angle1).to_array(),
+        ]);
+        normals.extend_from_slice(&[solar_locator_normal(plane).to_array(); 4]);
+        uvs.extend_from_slice(&[[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]]);
+        indices.extend_from_slice(&[
+            base_index,
+            base_index + 2,
+            base_index + 1,
+            base_index + 1,
+            base_index + 2,
+            base_index + 3,
+        ]);
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn solar_locator_point(plane: SolarLocatorPlane, radius: f32, angle_rad: f32) -> Vec3 {
+    let (sin, cos) = angle_rad.sin_cos();
+    match plane {
+        SolarLocatorPlane::Xy => Vec3::new(cos * radius, sin * radius, 0.0),
+        SolarLocatorPlane::Xz => Vec3::new(cos * radius, 0.0, sin * radius),
+        SolarLocatorPlane::Yz => Vec3::new(0.0, cos * radius, sin * radius),
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn solar_locator_normal(plane: SolarLocatorPlane) -> Vec3 {
+    match plane {
+        SolarLocatorPlane::Xy => Vec3::Z,
+        SolarLocatorPlane::Xz => Vec3::Y,
+        SolarLocatorPlane::Yz => Vec3::X,
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -978,12 +1589,8 @@ fn solar_reference_state(position_km: Vec3d, epoch: Epoch) -> StateVector {
 }
 
 #[cfg(target_arch = "wasm32")]
-fn spawn_solar_sun_glow(
-    commands: &mut Commands<'_, '_>,
-    parent: Entity,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
-) {
+fn spawn_solar_sun_light(commands: &mut Commands<'_, '_>, parent: Entity) {
+    let sun_radius_units = solar_body_radius_units(&CelestialBody::sun());
     let light = commands
         .spawn((
             Name::new("Solar System Sun Light"),
@@ -992,37 +1599,13 @@ fn spawn_solar_sun_glow(
                 color: Color::srgb(1.0, 0.82, 0.55),
                 intensity: SOLAR_SUN_POINT_LIGHT_INTENSITY,
                 range: SOLAR_SUN_POINT_LIGHT_RANGE_UNITS,
-                radius: SOLAR_SUN_POINT_LIGHT_RADIUS_UNITS,
+                radius: sun_radius_units,
                 shadows_enabled: false,
                 ..default()
             },
         ))
         .id();
     commands.entity(parent).add_child(light);
-
-    for (index, radius) in SOLAR_SUN_GLOW_RADII_UNITS.iter().copied().enumerate() {
-        let alpha = match index {
-            0 => 0.14,
-            1 => 0.035,
-            _ => 0.008,
-        };
-        let glow = commands
-            .spawn((
-                Name::new("Solar System Sun Glow"),
-                Transform::default(),
-                Mesh3d(meshes.add(Sphere::new(radius).mesh().uv(48, 24))),
-                MeshMaterial3d(materials.add(StandardMaterial {
-                    base_color: Color::srgba(1.0, 0.64, 0.18, alpha),
-                    emissive: Color::srgba(1.0, 0.58, 0.16, alpha).into(),
-                    alpha_mode: AlphaMode::Add,
-                    cull_mode: None,
-                    unlit: true,
-                    ..default()
-                })),
-            ))
-            .id();
-        commands.entity(parent).add_child(glow);
-    }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -1052,19 +1635,11 @@ fn spawn_solar_label(
 
 #[cfg(target_arch = "wasm32")]
 fn sync_solar_labels(
-    focus_selection: Res<'_, DemoSolarFocusSelection>,
     windows: Query<'_, '_, &Window, With<PrimaryWindow>>,
     cameras: Query<'_, '_, (&Camera, &GlobalTransform), With<MetricOrbitCamera>>,
     targets: Query<'_, '_, &GlobalTransform, Without<DemoSolarLabel>>,
     mut labels: Query<'_, '_, (&DemoSolarLabel, &mut Transform, &mut Visibility)>,
 ) {
-    if solar_focus_hides_overview_aids(focus_selection.target) {
-        for (_, _, mut visibility) in &mut labels {
-            *visibility = Visibility::Hidden;
-        }
-        return;
-    }
-
     let Some(window) = windows.iter().next() else {
         return;
     };
@@ -1106,13 +1681,161 @@ fn sync_solar_overview_aids_visibility(
 }
 
 #[cfg(target_arch = "wasm32")]
+fn sync_solar_sun_model_material(
+    sun_material: Option<ResMut<'_, DemoSolarSunModelMaterial>>,
+    mut materials: ResMut<'_, Assets<StandardMaterial>>,
+) {
+    let Some(mut sun_material) = sun_material else {
+        return;
+    };
+    if sun_material.applied {
+        return;
+    }
+    let Some(material) = materials.get_mut(&sun_material.handle) else {
+        return;
+    };
+    material.base_color = Color::srgb(1.0, 0.55, 0.08);
+    material.base_color_texture = Some(sun_material.texture.clone());
+    material.unlit = true;
+    material.emissive = Color::linear_rgb(0.25, 0.08, 0.01).into();
+    material.emissive_texture = Some(sun_material.texture.clone());
+    material.perceptual_roughness = 1.0;
+    material.reflectance = 0.0;
+    material.cull_mode = None;
+    sun_material.applied = true;
+}
+
+#[cfg(target_arch = "wasm32")]
+fn sync_solar_earth_atmosphere_material(
+    sun_transforms: Query<'_, '_, &GlobalTransform, With<DemoSolarSun>>,
+    earth_transforms: Query<'_, '_, &GlobalTransform, With<DemoSolarEarth>>,
+    atmosphere_layers: Query<
+        '_,
+        '_,
+        &MeshMaterial3d<DemoSolarEarthAtmosphereMaterial>,
+        With<DemoSolarEarthAtmosphereLayer>,
+    >,
+    mut materials: ResMut<'_, Assets<DemoSolarEarthAtmosphereMaterial>>,
+) {
+    let Some(sun_position) = sun_transforms
+        .iter()
+        .next()
+        .map(GlobalTransform::translation)
+    else {
+        return;
+    };
+    let Some(earth_position) = earth_transforms
+        .iter()
+        .next()
+        .map(GlobalTransform::translation)
+    else {
+        return;
+    };
+    let sun_direction = sun_position - earth_position;
+
+    for material_handle in &atmosphere_layers {
+        let Some(material) = materials.get_mut(&material_handle.0) else {
+            continue;
+        };
+        material.params.sun_direction_strength = solar_earth_atmosphere_sun_direction_param(
+            sun_direction,
+            material.params.sun_direction_strength.w,
+        );
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn sync_solar_earth_cloud_material(
+    sun_transforms: Query<'_, '_, &GlobalTransform, With<DemoSolarSun>>,
+    earth_transforms: Query<'_, '_, &GlobalTransform, With<DemoSolarEarth>>,
+    cloud_layers: Query<
+        '_,
+        '_,
+        &MeshMaterial3d<DemoSolarEarthCloudMaterial>,
+        With<DemoSolarEarthCloudLayer>,
+    >,
+    mut materials: ResMut<'_, Assets<DemoSolarEarthCloudMaterial>>,
+) {
+    let Some(sun_position) = sun_transforms
+        .iter()
+        .next()
+        .map(GlobalTransform::translation)
+    else {
+        return;
+    };
+    let Some(earth_position) = earth_transforms
+        .iter()
+        .next()
+        .map(GlobalTransform::translation)
+    else {
+        return;
+    };
+    let sun_direction = sun_position - earth_position;
+
+    for material_handle in &cloud_layers {
+        let Some(material) = materials.get_mut(&material_handle.0) else {
+            continue;
+        };
+        material.params.sun_direction_strength = solar_earth_atmosphere_sun_direction_param(
+            sun_direction,
+            material.params.sun_direction_strength.w,
+        );
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn sync_solar_earth_night_lights_material(
+    sun_transforms: Query<'_, '_, &GlobalTransform, With<DemoSolarSun>>,
+    earth_transforms: Query<'_, '_, &GlobalTransform, With<DemoSolarEarth>>,
+    night_light_layers: Query<
+        '_,
+        '_,
+        &MeshMaterial3d<DemoSolarEarthNightLightsMaterial>,
+        With<DemoSolarEarthNightLightsLayer>,
+    >,
+    mut materials: ResMut<'_, Assets<DemoSolarEarthNightLightsMaterial>>,
+) {
+    let Some(sun_position) = sun_transforms
+        .iter()
+        .next()
+        .map(GlobalTransform::translation)
+    else {
+        return;
+    };
+    let Some(earth_position) = earth_transforms
+        .iter()
+        .next()
+        .map(GlobalTransform::translation)
+    else {
+        return;
+    };
+    let sun_direction = sun_position - earth_position;
+
+    for material_handle in &night_light_layers {
+        let Some(material) = materials.get_mut(&material_handle.0) else {
+            continue;
+        };
+        material.params.sun_direction_strength = solar_earth_atmosphere_sun_direction_param(
+            sun_direction,
+            material.params.sun_direction_strength.w,
+        );
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
 fn sync_solar_ui_controls(
+    mut celestial_epoch: ResMut<'_, CelestialEpoch>,
     mut camera_state: ResMut<'_, MetricOrbitCameraState>,
     mut trail_window: ResMut<'_, DemoSolarTrailWindow>,
     mut focus_selection: ResMut<'_, DemoSolarFocusSelection>,
     mut metric_focus_selection: ResMut<'_, MetricSceneFocusSelection>,
     mut ui_state: ResMut<'_, DemoSolarUiState>,
 ) {
+    let next_epoch = browser_solar_epoch();
+    if celestial_epoch.epoch != next_epoch {
+        celestial_epoch.epoch = next_epoch;
+    }
+
     trail_window.months = browser_solar_trail_months();
     let next_focus = browser_solar_focus_target();
     if focus_selection.target != next_focus {
@@ -1133,6 +1856,7 @@ fn sync_solar_ui_controls(
 fn sync_solar_camera_focus(
     mut camera_state: ResMut<'_, MetricOrbitCameraState>,
     mut focus_selection: ResMut<'_, DemoSolarFocusSelection>,
+    mut focus_tracker: ResMut<'_, DemoSolarFocusPivotTracker>,
     focus_pivot: Res<'_, MetricSceneFocusPivot>,
 ) {
     let target = focus_selection.target;
@@ -1154,8 +1878,15 @@ fn sync_solar_camera_focus(
         target_changed,
         camera_changed_by_later_system,
     );
-    if recenter_needed {
+    if target_changed || recenter_needed {
         camera_state.pivot_units = focus_pivot.pivot_units;
+    } else if let Some(delta) = solar_live_focus_pivot_delta(
+        target,
+        focus_tracker.target,
+        focus_tracker.pivot_units,
+        focus_pivot.pivot_units,
+    ) {
+        camera_state.pivot_units += delta;
     }
     if target_changed {
         camera_state.distance_units = solar_focus_distance_units(target);
@@ -1171,6 +1902,8 @@ fn sync_solar_camera_focus(
     if focus_selection.applied != Some(target) {
         focus_selection.applied = Some(target);
     }
+    focus_tracker.target = Some(target);
+    focus_tracker.pivot_units = Some(focus_pivot.pivot_units);
 }
 
 #[cfg(any(target_arch = "wasm32", test))]
@@ -1181,16 +1914,40 @@ pub(crate) fn solar_focus_should_recenter_camera(
     target_changed: bool,
     camera_state_changed: bool,
 ) -> bool {
-    if target_changed || solar_focus_tracks_live_pivot(target) {
+    if target_changed {
         return true;
+    }
+    if solar_focus_tracks_live_pivot(target) {
+        return false;
     }
     !camera_state_changed && solar_focus_pivot_needs_recenter(camera_state, focus_pivot, target)
 }
 
 #[cfg(any(target_arch = "wasm32", test))]
 pub(crate) const fn solar_focus_tracks_live_pivot(target: DemoSolarFocusTarget) -> bool {
-    let _ = target;
-    false
+    matches!(
+        target,
+        DemoSolarFocusTarget::Mercury
+            | DemoSolarFocusTarget::Venus
+            | DemoSolarFocusTarget::Earth
+            | DemoSolarFocusTarget::Moon
+            | DemoSolarFocusTarget::Mars
+    )
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+pub(crate) fn solar_live_focus_pivot_delta(
+    target: DemoSolarFocusTarget,
+    tracked_target: Option<DemoSolarFocusTarget>,
+    tracked_pivot_units: Option<DVec3>,
+    focus_pivot_units: DVec3,
+) -> Option<DVec3> {
+    if !solar_focus_tracks_live_pivot(target) || tracked_target != Some(target) {
+        return None;
+    }
+
+    let delta = focus_pivot_units - tracked_pivot_units?;
+    delta.is_finite().then_some(delta)
 }
 
 #[cfg(any(target_arch = "wasm32", test))]
@@ -1436,6 +2193,11 @@ pub(crate) fn solar_body_radius_units(body: &CelestialBody) -> f32 {
 }
 
 #[cfg(any(target_arch = "wasm32", test))]
+pub(crate) const fn solar_nasa_sun_model_scale_units(radius_units: f32) -> f32 {
+    radius_units / SOLAR_NASA_SUN_MODEL_SOURCE_RADIUS_UNITS
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
 #[allow(
     clippy::cast_possible_truncation,
     reason = "Solar body radii are small render-unit f32 values for Bevy camera clamps."
@@ -1468,32 +2230,6 @@ pub(crate) fn solar_dynamic_body_base_tile_zoom(target: DemoSolarFocusTarget) ->
         DemoSolarFocusTarget::Mars => SOLAR_MARS_TILE_ZOOM,
         DemoSolarFocusTarget::Scene | DemoSolarFocusTarget::Sun => 0,
     }
-}
-
-#[cfg(target_arch = "wasm32")]
-fn solar_body_visual(
-    body: CelestialBody,
-    minimum_visible_radius_units: f32,
-    color: Color,
-) -> MetricVisualObject {
-    solar_body_visual_from_radius(
-        body.mean_radius_km.as_f64(),
-        minimum_visible_radius_units,
-        color,
-    )
-}
-
-#[cfg(target_arch = "wasm32")]
-fn solar_body_visual_from_radius(
-    radius_km: f64,
-    minimum_visible_radius_units: f32,
-    color: Color,
-) -> MetricVisualObject {
-    MetricVisualObject::physical_radius(
-        Kilometers::new(radius_km),
-        MetricVisualRadiusPolicy::minimum(minimum_visible_radius_units),
-        color,
-    )
 }
 
 #[cfg(any(target_arch = "wasm32", test))]

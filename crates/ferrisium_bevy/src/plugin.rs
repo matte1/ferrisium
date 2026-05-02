@@ -24,6 +24,7 @@ use crate::h3_overlay::{
     sync_h3_map_picking, H3CellClicked, H3HoverState, H3OverlayEntities,
 };
 use crate::input_capture::{reset_ferrisium_input_capture, FerrisiumInputCapture};
+use crate::metric_camera::sync_metric_orbit_camera;
 use crate::metric_scene::{
     sync_metric_scene_focus_pivot, sync_metric_scene_focus_to_celestial_focus,
     sync_metric_scene_lod_from_camera, sync_metric_scene_object_registry,
@@ -35,7 +36,8 @@ use crate::metric_visual::{
     MetricVisualEntities,
 };
 use crate::skybox::{
-    queue_deferred_globe_skybox, sync_globe_skybox, GlobeSkyboxState, GlobeSkyboxUploadSettings,
+    queue_deferred_globe_skybox, sync_globe_skybox, sync_progressive_globe_skybox,
+    GlobeSkyboxState, GlobeSkyboxUploadSettings,
 };
 use crate::source::ActiveTileSource;
 use crate::surface_context::sync_globe_surface_render_contexts;
@@ -77,7 +79,8 @@ pub enum FerrisiumSet {
 /// adding Bevy's `DefaultPlugins` must disable Bevy's `TransformPlugin` before
 /// adding this plugin. Apps can opt into globe skybox rendering with
 /// [`crate::GlobeSkybox`] or defer large skybox loads with
-/// [`crate::DeferredGlobeSkybox`].
+/// [`crate::DeferredGlobeSkybox`]. Apps can also progressively upgrade through
+/// skybox resolutions with [`crate::ProgressiveGlobeSkybox`].
 pub struct FerrisiumPlugin;
 
 impl Plugin for FerrisiumPlugin {
@@ -159,7 +162,8 @@ fn add_ferrisium_view_systems(app: &mut App) {
                 .after(sync_celestial_body_placements)
                 .after(sync_metric_scene_focus_to_celestial_focus)
                 .after(sync_metric_object_placements)
-                .after(sync_metric_scene_focus_pivot),
+                .after(sync_metric_scene_focus_pivot)
+                .after(sync_metric_orbit_camera),
             sync_metric_scene_presentation_layers.after(sync_metric_scene_lod_from_camera),
             reset_ferrisium_input_capture.in_set(FerrisiumSet::ResetInputCapture),
             handle_map_input.in_set(FerrisiumSet::HandleInput),
@@ -246,6 +250,7 @@ fn add_ferrisium_render_systems(app: &mut App) {
                 .after(sync_h3_cell_lookups)
                 .after(update_pointer_geo)
                 .after(sync_globe_camera),
+            sync_progressive_globe_skybox.before(sync_globe_skybox),
             sync_globe_skybox.after(sync_globe_camera),
         ),
     );

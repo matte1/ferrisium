@@ -5,6 +5,8 @@
 //! stacked PNG cubemaps need before Bevy's [`Skybox`] component can sample them.
 //! Apps that want first-frame interaction before large skybox assets start
 //! loading can insert [`DeferredGlobeSkybox`] instead.
+//! Apps that want a low-resolution background first and sharper variants later
+//! can insert [`ProgressiveGlobeSkybox`].
 //! Ferrisium's demo asset is generated so [`Quat::IDENTITY`] skybox rotation
 //! corresponds to the inertial J2000 sky frame.
 
@@ -28,6 +30,10 @@ const DEFAULT_GLOBE_SKYBOX_BRIGHTNESS: f32 = 1_000.0;
 pub const DEFAULT_GLOBE_SKYBOX_DEFER_FRAMES: u32 = 30;
 /// Default number of idle frames after decode before the skybox is uploaded.
 pub const DEFAULT_GLOBE_SKYBOX_UPLOAD_IDLE_FRAMES: u32 = 90;
+/// Default elapsed seconds between progressive skybox upgrades.
+pub const DEFAULT_PROGRESSIVE_GLOBE_SKYBOX_UPGRADE_SECONDS: f32 = 4.0;
+/// Default idle frames before uploading each progressive skybox step.
+pub const DEFAULT_PROGRESSIVE_GLOBE_SKYBOX_UPLOAD_IDLE_FRAMES: u32 = 6;
 /// Default app asset-folder path for Ferrisium-provided skybox files.
 pub const FERRISIUM_SKYBOX_ASSET_ROOT: &str = "ferrisium/skyboxes";
 /// Default Milky Way cubemap resolution for apps that want a balanced bundled asset.
@@ -255,6 +261,157 @@ impl Default for GlobeSkyboxUploadSettings {
     }
 }
 
+/// Skybox sequence that starts low resolution and upgrades over time.
+///
+/// Insert this resource instead of [`GlobeSkybox`] when a browser app should
+/// show a small skybox quickly and then replace it with sharper variants after
+/// the scene has become interactive. Ferrisium updates [`GlobeSkybox`] and
+/// [`GlobeSkyboxUploadSettings`] from this sequence automatically.
+#[derive(Resource, Debug, Clone, PartialEq)]
+pub struct ProgressiveGlobeSkybox {
+    skyboxes: Vec<GlobeSkybox>,
+    upgrade_interval_seconds: f32,
+    initial_upload_idle_frames: u32,
+    upgrade_upload_idle_frames: u32,
+    active_index: Option<usize>,
+    seconds_until_next: f32,
+}
+
+impl ProgressiveGlobeSkybox {
+    /// Creates a progressive skybox sequence from explicit skybox configs.
+    ///
+    /// Empty sequences are accepted and behave as a no-op.
+    #[must_use]
+    pub fn new(skyboxes: impl IntoIterator<Item = GlobeSkybox>) -> Self {
+        Self {
+            skyboxes: skyboxes.into_iter().collect(),
+            upgrade_interval_seconds: DEFAULT_PROGRESSIVE_GLOBE_SKYBOX_UPGRADE_SECONDS,
+            initial_upload_idle_frames: DEFAULT_PROGRESSIVE_GLOBE_SKYBOX_UPLOAD_IDLE_FRAMES,
+            upgrade_upload_idle_frames: DEFAULT_PROGRESSIVE_GLOBE_SKYBOX_UPLOAD_IDLE_FRAMES,
+            active_index: None,
+            seconds_until_next: DEFAULT_PROGRESSIVE_GLOBE_SKYBOX_UPGRADE_SECONDS,
+        }
+    }
+
+    /// Creates a progressive skybox sequence from bundled Milky Way variants.
+    ///
+    /// The consuming app must copy every requested variant into the Bevy asset
+    /// folder at the paths returned by [`MilkyWaySkyboxResolution::asset_path`].
+    #[must_use]
+    pub fn milky_way(resolutions: impl IntoIterator<Item = MilkyWaySkyboxResolution>) -> Self {
+        Self::new(resolutions.into_iter().map(GlobeSkybox::milky_way))
+    }
+
+    /// Sets the brightness for every skybox in the sequence.
+    #[must_use]
+    pub fn with_brightness(mut self, brightness: f32) -> Self {
+        for skybox in &mut self.skyboxes {
+            skybox.brightness = brightness;
+        }
+        self
+    }
+
+    /// Sets the rotation for every skybox in the sequence.
+    #[must_use]
+    pub fn with_rotation(mut self, rotation: Quat) -> Self {
+        for skybox in &mut self.skyboxes {
+            skybox.rotation = rotation;
+        }
+        self
+    }
+
+    /// Sets elapsed seconds between progressive upgrades.
+    ///
+    /// Non-finite or negative intervals are normalized to zero, which means
+    /// the next step becomes eligible on the next update tick.
+    #[must_use]
+    pub fn with_upgrade_interval_seconds(mut self, seconds: f32) -> Self {
+        self.upgrade_interval_seconds = normalized_progressive_interval_seconds(seconds);
+        self.seconds_until_next = self.upgrade_interval_seconds;
+        self
+    }
+
+    /// Sets idle frames before the first decoded skybox is uploaded.
+    #[must_use]
+    pub const fn with_initial_upload_idle_frames(mut self, frames: u32) -> Self {
+        self.initial_upload_idle_frames = frames;
+        self
+    }
+
+    /// Sets idle frames before each decoded upgrade skybox is uploaded.
+    #[must_use]
+    pub const fn with_upgrade_upload_idle_frames(mut self, frames: u32) -> Self {
+        self.upgrade_upload_idle_frames = frames;
+        self
+    }
+
+    /// Skyboxes in the configured upgrade order.
+    #[must_use]
+    pub fn skyboxes(&self) -> &[GlobeSkybox] {
+        &self.skyboxes
+    }
+
+    /// Index of the currently requested skybox, if the sequence has started.
+    #[must_use]
+    pub const fn active_index(&self) -> Option<usize> {
+        self.active_index
+    }
+
+    /// Elapsed seconds between progressive upgrades.
+    #[must_use]
+    pub const fn upgrade_interval_seconds(&self) -> f32 {
+        self.upgrade_interval_seconds
+    }
+
+    fn start_if_needed(&mut self) -> Option<ProgressiveGlobeSkyboxUpdate> {
+        if self.active_index.is_some() {
+            return None;
+        }
+        let skybox = self.skyboxes.first()?.clone();
+        self.active_index = Some(0);
+        self.seconds_until_next = self.upgrade_interval_seconds;
+
+        Some(ProgressiveGlobeSkyboxUpdate {
+            skybox,
+            upload_idle_frames: self.initial_upload_idle_frames,
+        })
+    }
+
+    fn tick_upgrade(&mut self, delta_seconds: f32) -> Option<ProgressiveGlobeSkyboxUpdate> {
+        let active_index = self.active_index?;
+        let next_index = active_index + 1;
+        if next_index >= self.skyboxes.len() {
+            return None;
+        }
+
+        self.seconds_until_next -= normalized_progressive_interval_seconds(delta_seconds);
+        if self.seconds_until_next > 0.0 {
+            return None;
+        }
+
+        self.active_index = Some(next_index);
+        self.seconds_until_next = self.upgrade_interval_seconds;
+        Some(ProgressiveGlobeSkyboxUpdate {
+            skybox: self.skyboxes[next_index].clone(),
+            upload_idle_frames: self.upgrade_upload_idle_frames,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct ProgressiveGlobeSkyboxUpdate {
+    skybox: GlobeSkybox,
+    upload_idle_frames: u32,
+}
+
+fn normalized_progressive_interval_seconds(seconds: f32) -> f32 {
+    if seconds.is_finite() {
+        seconds.max(0.0)
+    } else {
+        0.0
+    }
+}
+
 #[derive(Resource, Debug, Default)]
 pub(crate) struct GlobeSkyboxState {
     config: Option<GlobeSkybox>,
@@ -309,6 +466,52 @@ type GlobeSkyboxCameraQuery<'w, 's> = Query<
         Or<(With<Globe3dCamera>, With<MetricSceneCamera>)>,
     ),
 >;
+
+/// Advances an optional progressive skybox sequence and writes the active skybox.
+pub(crate) fn sync_progressive_globe_skybox(
+    mut commands: Commands<'_, '_>,
+    time: Res<'_, Time>,
+    progressive: Option<ResMut<'_, ProgressiveGlobeSkybox>>,
+    mut upload_settings: ResMut<'_, GlobeSkyboxUploadSettings>,
+    mut skybox: Option<ResMut<'_, GlobeSkybox>>,
+) {
+    let Some(mut progressive) = progressive else {
+        return;
+    };
+
+    if let Some(update) = progressive.start_if_needed() {
+        apply_progressive_globe_skybox_update(
+            &mut commands,
+            &mut skybox,
+            &mut upload_settings,
+            update,
+        );
+        return;
+    }
+
+    if let Some(update) = progressive.tick_upgrade(time.delta_secs()) {
+        apply_progressive_globe_skybox_update(
+            &mut commands,
+            &mut skybox,
+            &mut upload_settings,
+            update,
+        );
+    }
+}
+
+fn apply_progressive_globe_skybox_update(
+    commands: &mut Commands<'_, '_>,
+    skybox: &mut Option<ResMut<'_, GlobeSkybox>>,
+    upload_settings: &mut GlobeSkyboxUploadSettings,
+    update: ProgressiveGlobeSkyboxUpdate,
+) {
+    upload_settings.idle_frames_after_decode = update.upload_idle_frames;
+    if let Some(current_skybox) = skybox.as_deref_mut() {
+        *current_skybox = update.skybox;
+    } else {
+        commands.insert_resource(update.skybox);
+    }
+}
 
 /// Converts a deferred skybox request into the normal skybox resource once ready.
 pub(crate) fn queue_deferred_globe_skybox(
@@ -594,6 +797,7 @@ mod tests {
         GlobeSkyboxUploadSettings, MilkyWaySkyboxResolution, StackedCubemapError,
         TextureViewDimension, DEFAULT_GLOBE_SKYBOX_DEFER_FRAMES,
         DEFAULT_GLOBE_SKYBOX_UPLOAD_IDLE_FRAMES, DEFAULT_MILKY_WAY_SKYBOX_RESOLUTION,
+        DEFAULT_PROGRESSIVE_GLOBE_SKYBOX_UPLOAD_IDLE_FRAMES,
     };
 
     #[test]
@@ -660,6 +864,82 @@ mod tests {
         assert_eq!(
             GlobeSkyboxUploadSettings::default().idle_frames_after_decode,
             DEFAULT_GLOBE_SKYBOX_UPLOAD_IDLE_FRAMES
+        );
+    }
+
+    #[test]
+    fn progressive_milky_way_skybox_builds_ordered_steps() {
+        let progressive = super::ProgressiveGlobeSkybox::milky_way([
+            MilkyWaySkyboxResolution::Face512,
+            MilkyWaySkyboxResolution::Face1024,
+            MilkyWaySkyboxResolution::Face2048,
+        ])
+        .with_brightness(420.0);
+
+        assert_eq!(progressive.skyboxes().len(), 3);
+        assert!(progressive.skyboxes()[0]
+            .image_path
+            .ends_with("milkyway_512.png"));
+        assert!(progressive.skyboxes()[2]
+            .image_path
+            .ends_with("milkyway_2048.png"));
+        assert!(progressive
+            .skyboxes()
+            .iter()
+            .all(|skybox| (skybox.brightness - 420.0).abs() <= f32::EPSILON));
+    }
+
+    #[test]
+    fn progressive_skybox_starts_then_advances_by_elapsed_time() {
+        let mut progressive = super::ProgressiveGlobeSkybox::new([
+            GlobeSkybox::stacked_png("textures/stars_512.png"),
+            GlobeSkybox::stacked_png("textures/stars_1024.png"),
+        ])
+        .with_upgrade_interval_seconds(2.0)
+        .with_initial_upload_idle_frames(1)
+        .with_upgrade_upload_idle_frames(3);
+
+        let start = progressive.start_if_needed();
+        assert_eq!(progressive.active_index(), Some(0));
+        assert_eq!(
+            start
+                .as_ref()
+                .map(|update| update.skybox.image_path.as_str()),
+            Some("textures/stars_512.png")
+        );
+        assert_eq!(
+            start.as_ref().map(|update| update.upload_idle_frames),
+            Some(1)
+        );
+        assert_eq!(progressive.start_if_needed(), None);
+        assert_eq!(progressive.tick_upgrade(1.0), None);
+
+        let upgrade = progressive.tick_upgrade(1.0);
+        assert_eq!(progressive.active_index(), Some(1));
+        assert_eq!(
+            upgrade
+                .as_ref()
+                .map(|update| update.skybox.image_path.as_str()),
+            Some("textures/stars_1024.png")
+        );
+        assert_eq!(
+            upgrade.as_ref().map(|update| update.upload_idle_frames),
+            Some(3)
+        );
+        assert_eq!(progressive.tick_upgrade(10.0), None);
+    }
+
+    #[test]
+    fn progressive_skybox_defaults_to_short_upload_idle_window() {
+        let mut progressive = super::ProgressiveGlobeSkybox::new([GlobeSkybox::stacked_png(
+            "textures/stars_512.png",
+        )]);
+
+        assert_eq!(
+            progressive
+                .start_if_needed()
+                .map(|update| update.upload_idle_frames),
+            Some(DEFAULT_PROGRESSIVE_GLOBE_SKYBOX_UPLOAD_IDLE_FRAMES)
         );
     }
 

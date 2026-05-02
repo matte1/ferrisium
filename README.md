@@ -17,8 +17,9 @@ moving and there is no release tag yet.
   click messages
 - geodetic polylines and convex no-hole geodetic polygons on the map and globe
 - globe-space placement through `GlobePosition`, `GlobeLink`, and `GlobeLabel`
-- metric scene objects, visual-radius policies, trajectories, and orbit camera
-  controls for solar-system style views
+- metric scene objects, visual-radius policies, trajectories, orbit camera
+  controls, a NASA GLB Sun model, Earth night-lights for globe/solar-system
+  views, and shader-backed cloud/atmosphere layers for solar-system style views
 - ANISE ephemeris provider adapter with deterministic demo fallback data
 
 ## Not Yet
@@ -67,6 +68,8 @@ Useful demo URLs and parameters:
 | close globe focus           | `?focus=earth`, `mercury`, `venus`, `moon`, `mars`, `ceres`, `io`, `europa`, `ganymede`, `callisto`, `titan`, `dione`, `enceladus`, `iapetus`, `mimas`, `rhea`, or `tethys` |
 | map body                    | `?view=map&map_body=earth`, `mercury`, `venus`, `moon`, `mars`, `ceres`, `io`, `europa`, `ganymede`, `callisto`, `titan`, `dione`, `enceladus`, `iapetus`, `mimas`, `rhea`, or `tethys` |
 | solar focus                 | `?view=solar&solar_focus=scene`, `sun`, `mercury`, `venus`, `earth`, `moon`, or `mars`                                                                                   |
+| solar epoch offset          | `?view=solar&solar_days=30` offsets the solar-system scene from J2000 by days                                                                                            |
+| solar time playback         | `?view=solar&solar_running=1&solar_speed=7` starts solar time at the selected days-per-browser-second speed                                                              |
 | Earth tile source           | `?tile_source=nasa-blue-marble`, `openstreetmap`, `mapbox-satellite`, `mapbox-streets`, `mapbox-outdoors`, `mapbox-light`, `mapbox-dark`, or `mapbox-satellite-streets` |
 | Mapbox public token         | `?mapbox_token=pk...`                                                                                                                                                   |
 | H3 globe inspection overlay | `?h3_inspect=1`                                                                                                                                                         |
@@ -174,7 +177,7 @@ Trunk apps can copy the tree at build time:
 Apps that only use one resolution can copy that single PNG to the path returned
 by `MilkyWaySkyboxResolution::asset_path()`.
 
-Then configure the built-in Milky Way skybox:
+Then configure a single built-in Milky Way skybox:
 
 ```rust
 app.insert_resource(
@@ -182,8 +185,24 @@ app.insert_resource(
 );
 ```
 
+For browser apps that should show stars early and sharpen the background later,
+use the progressive skybox resource:
+
+```rust
+app.insert_resource(
+    ProgressiveGlobeSkybox::milky_way([
+        MilkyWaySkyboxResolution::Face512,
+        MilkyWaySkyboxResolution::Face1024,
+        MilkyWaySkyboxResolution::Face2048,
+    ]),
+);
+```
+
 Available Milky Way cubemap variants use 512, 1024, 2048, and 4096 pixel faces.
 The 4096 variant is full resolution and should be deferred in browser views.
+The bundled demo starts with the 512px variant and progressively upgrades
+through 1024px and 2048px variants so the background appears early without
+automatically fetching the full-resolution skybox.
 
 The demo defaults to public no-key sources where possible:
 

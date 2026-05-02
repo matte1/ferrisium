@@ -75,11 +75,11 @@ fn main() -> Result<(), &'static str> {
 )]
 mod tests {
     use bevy::math::DVec3;
-    use bevy::prelude::{Color, GlobalAmbientLight, Visibility};
+    use bevy::pbr::Material;
+    use bevy::prelude::{AlphaMode, Color, GlobalAmbientLight, Handle, Image, Vec3, Visibility};
     use ferrisium_bevy::prelude::{
-        DeferredGlobeSkybox, Globe3dState, MetricOrbitCameraState, MetricSceneFocusPivot,
-        MetricSceneFocusTarget, MetricSceneId, MetricScenePresentation, TiledBodySurface,
-        DEFAULT_GLOBE_SKYBOX_DEFER_FRAMES,
+        Globe3dState, MetricOrbitCameraState, MetricSceneFocusPivot, MetricSceneFocusTarget,
+        MetricSceneId, MetricScenePresentation, TiledBodySurface,
     };
 
     use crate::browser_params::{
@@ -87,22 +87,27 @@ mod tests {
         parse_positive_f32, query_param,
     };
     use crate::demo_config::{
-        demo_earth_tile_source, demo_focus_body_id_for_trek_body, demo_focus_metric_target,
-        demo_globe_ambient_fill_light, demo_globe_skybox_config, demo_map_tile_source,
+        demo_earth_tile_source, demo_final_globe_skybox_config, demo_final_solar_skybox_config,
+        demo_focus_body_id_for_trek_body, demo_focus_metric_target, demo_globe_ambient_fill_light,
+        demo_globe_skybox_config, demo_map_tile_source, demo_milky_way_skybox_config,
         demo_solar_ambient_fill_light, demo_solar_skybox_config, parse_demo_earth_tile_source,
-        parse_demo_focus, parse_demo_map_body, parse_demo_mode, parse_solar_focus_target,
-        parse_solar_trail_months, solar_demo_epoch, solar_dynamic_tile_source, solar_focus_body,
+        parse_demo_focus, parse_demo_map_body, parse_demo_mode, parse_solar_epoch_offset_days,
+        parse_solar_focus_target, parse_solar_trail_months, solar_demo_epoch,
+        solar_dynamic_tile_source, solar_epoch_from_offset_days, solar_focus_body,
         solar_focus_metric_target, DemoEarthTileSource, DemoGlobeCameraOverride, DemoMapBody,
         DemoMode, DemoSolarFocusTarget, DemoSolarTexturedBody,
         DEMO_GLOBE_CAMERA_QUERY_MAX_ABS_PITCH_DEG,
-        DEMO_GLOBE_CAMERA_QUERY_MIN_DISTANCE_RADIUS_FACTOR, SOLAR_TRAIL_DEFAULT_MONTHS,
+        DEMO_GLOBE_CAMERA_QUERY_MIN_DISTANCE_RADIUS_FACTOR, DEMO_MILKY_WAY_SKYBOX_RESOLUTIONS,
+        DEMO_MILKY_WAY_SKYBOX_UPGRADE_SECONDS, DEMO_MILKY_WAY_UPGRADE_UPLOAD_IDLE_FRAMES,
+        SOLAR_TIME_MAX_OFFSET_DAYS, SOLAR_TIME_MIN_OFFSET_DAYS, SOLAR_TRAIL_DEFAULT_MONTHS,
         SOLAR_TRAIL_MAX_MONTHS, SOLAR_TRAIL_MAX_SAMPLES, SOLAR_TRAIL_MIN_MONTHS,
         SOLAR_TRAIL_MIN_SAMPLES, SOLAR_TRAIL_RESAMPLE_SECONDS,
     };
     use crate::ephemeris_demo::{demo_fallback_state, rotation_about_y};
     use crate::globe_mode::{
         apply_demo_globe_camera_override, apply_demo_globe_camera_override_with_ephemeris,
-        body_radius_units, demo_globe_orbit_angles_for_surface, demo_globe_surface_presentations,
+        body_radius_units, demo_globe_earth_night_lights_visibility,
+        demo_globe_orbit_angles_for_surface, demo_globe_surface_presentations,
         demo_globe_tiled_body_surface, demo_globe_tiled_body_zoom,
         demo_secondary_globe_body_visibility, globe_secondary_body_lod_policy,
         globe_surface_direction_for_lon_lat, orbit_angles_for_direction,
@@ -110,23 +115,39 @@ mod tests {
         DEMO_REGULAR_BODY_TILE_ZOOM,
     };
     use crate::solar_mode::{
-        demo_venus_body, solar_body_lod_policy, solar_body_radius_units,
-        solar_camera_min_distance_units, solar_day_side_focus_angles,
+        demo_venus_body, earth_equirectangular_overlay_rotation, solar_body_lod_policy,
+        solar_body_radius_units, solar_camera_min_distance_units, solar_day_side_focus_angles,
         solar_dynamic_body_base_tile_zoom, solar_dynamic_body_focus_distance_units,
         solar_dynamic_body_max_selected_tiles, solar_dynamic_body_radius_units,
-        solar_focus_distance_units, solar_focus_hides_overview_aids,
-        solar_focus_pivot_needs_recenter, solar_focus_recenter_threshold_units,
-        solar_focus_should_recenter_camera, solar_focus_tracks_live_pivot,
-        solar_paths_need_resample, solar_reference_ring_path, solar_reference_spoke_path,
-        solar_scene_focus_distance_units, solar_sun_light_illuminance_at_distance_units,
-        solar_tiled_body_fallback_color, solar_tiled_body_surface, solar_trail_sample_count,
-        solar_trail_start_epoch, solar_true_radius_policy, DemoSolarOrbitPathEntities,
-        DemoSolarTrailWindow, SOLAR_AU_KM, SOLAR_BODY_FOCUS_DISTANCE_UNITS,
-        SOLAR_DYNAMIC_BODY_BASE_SURFACE_DISTANCE_RADIUS_FACTOR,
-        SOLAR_DYNAMIC_BODY_FOCUS_DISTANCE_RADIUS_FACTOR, SOLAR_EARTH_TILE_ZOOM,
-        SOLAR_MARS_TILE_ZOOM, SOLAR_MERCURY_TILE_ZOOM, SOLAR_MOON_TILE_ZOOM,
-        SOLAR_RENDER_KILOMETERS_PER_UNIT, SOLAR_SUN_POINT_LIGHT_RANGE_UNITS,
-        SOLAR_SURFACE_LOD_DISTANCE_RADIUS_FACTOR, SOLAR_VENUS_TILE_ZOOM,
+        solar_earth_atmosphere_material, solar_earth_atmosphere_radius_units,
+        solar_earth_atmosphere_sun_direction_param, solar_earth_cloud_material,
+        solar_earth_cloud_radius_units, solar_earth_night_lights_material,
+        solar_earth_night_lights_radius_units, solar_focus_distance_units,
+        solar_focus_hides_overview_aids, solar_focus_pivot_needs_recenter,
+        solar_focus_recenter_threshold_units, solar_focus_should_recenter_camera,
+        solar_focus_tracks_live_pivot, solar_live_focus_pivot_delta,
+        solar_nasa_sun_model_scale_units, solar_paths_need_resample, solar_reference_ring_path,
+        solar_reference_spoke_path, solar_scene_focus_distance_units,
+        solar_sun_light_illuminance_at_distance_units, solar_tiled_body_fallback_color,
+        solar_tiled_body_surface, solar_trail_sample_count, solar_trail_start_epoch,
+        solar_true_radius_policy, DemoSolarOrbitPathEntities, DemoSolarTrailWindow, SOLAR_AU_KM,
+        SOLAR_BODY_FOCUS_DISTANCE_UNITS, SOLAR_DYNAMIC_BODY_BASE_SURFACE_DISTANCE_RADIUS_FACTOR,
+        SOLAR_DYNAMIC_BODY_FOCUS_DISTANCE_RADIUS_FACTOR, SOLAR_EARTH_ATMOSPHERE_DISK_ALPHA,
+        SOLAR_EARTH_ATMOSPHERE_FRESNEL_POWER, SOLAR_EARTH_ATMOSPHERE_MAX_ALPHA,
+        SOLAR_EARTH_ATMOSPHERE_NIGHT_ALPHA, SOLAR_EARTH_ATMOSPHERE_RADIUS_FACTOR,
+        SOLAR_EARTH_ATMOSPHERE_RAYLEIGH_ALPHA, SOLAR_EARTH_ATMOSPHERE_SHADER_PATH,
+        SOLAR_EARTH_ATMOSPHERE_TERMINATOR_ALPHA, SOLAR_EARTH_CLOUDS_MASK_SOFTNESS,
+        SOLAR_EARTH_CLOUDS_MASK_THRESHOLD, SOLAR_EARTH_CLOUDS_MAX_ALPHA,
+        SOLAR_EARTH_CLOUDS_NIGHT_ALPHA_FACTOR, SOLAR_EARTH_CLOUDS_RADIUS_FACTOR,
+        SOLAR_EARTH_CLOUDS_SHADER_PATH, SOLAR_EARTH_CLOUDS_TEXTURE_PATH,
+        SOLAR_EARTH_NIGHT_LIGHTS_MASK_SOFTNESS, SOLAR_EARTH_NIGHT_LIGHTS_MASK_THRESHOLD,
+        SOLAR_EARTH_NIGHT_LIGHTS_MAX_ALPHA, SOLAR_EARTH_NIGHT_LIGHTS_RADIUS_FACTOR,
+        SOLAR_EARTH_NIGHT_LIGHTS_SHADER_PATH, SOLAR_EARTH_NIGHT_LIGHTS_TERMINATOR_FADE,
+        SOLAR_EARTH_NIGHT_LIGHTS_TEXTURE_PATH, SOLAR_EARTH_TILE_ZOOM, SOLAR_MARS_TILE_ZOOM,
+        SOLAR_MERCURY_TILE_ZOOM, SOLAR_MOON_TILE_ZOOM, SOLAR_NASA_SUN_MODEL_ASSET_PATH,
+        SOLAR_NASA_SUN_MODEL_SOURCE_RADIUS_UNITS, SOLAR_RENDER_KILOMETERS_PER_UNIT,
+        SOLAR_SUN_POINT_LIGHT_RANGE_UNITS, SOLAR_SURFACE_LOD_DISTANCE_RADIUS_FACTOR,
+        SOLAR_VENUS_TILE_ZOOM,
     };
     use ferrisium_core::prelude::{
         LonLat, NasaTrekRegularBody, PlanetaryBody, TileId, TileProjection, TileSource,
@@ -148,6 +169,12 @@ mod tests {
             (lhs - rhs).abs() <= 1.0e-6,
             "float mismatch: lhs={lhs}, rhs={rhs}"
         );
+    }
+
+    fn assert_vec3_close(lhs: Vec3, rhs: Vec3) {
+        assert_close_f32(lhs.x, rhs.x);
+        assert_close_f32(lhs.y, rhs.y);
+        assert_close_f32(lhs.z, rhs.z);
     }
 
     fn assert_cool_space_fill_light(
@@ -467,32 +494,96 @@ mod tests {
     }
 
     #[test]
-    fn solar_demo_epoch_is_fixed_at_j2000() {
+    fn solar_demo_epoch_origin_is_j2000() {
         assert_eq!(solar_demo_epoch(), Epoch::J2000);
     }
 
     #[test]
-    fn solar_planet_focus_does_not_chase_live_ephemeris_jitter() {
-        assert!(!solar_focus_tracks_live_pivot(DemoSolarFocusTarget::Earth));
-        assert!(!solar_focus_tracks_live_pivot(DemoSolarFocusTarget::Moon));
-        assert!(!solar_focus_tracks_live_pivot(DemoSolarFocusTarget::Mars));
+    fn solar_epoch_offset_days_are_clamped_and_applied_from_j2000() {
+        assert_eq!(parse_solar_epoch_offset_days("bad"), None);
+        assert_eq!(parse_solar_epoch_offset_days("nan"), None);
+        assert_eq!(parse_solar_epoch_offset_days("1.5"), Some(1.5));
+        assert_eq!(
+            parse_solar_epoch_offset_days("-99999"),
+            Some(SOLAR_TIME_MIN_OFFSET_DAYS)
+        );
+        assert_eq!(
+            parse_solar_epoch_offset_days("99999"),
+            Some(SOLAR_TIME_MAX_OFFSET_DAYS)
+        );
+
+        let one_day = solar_epoch_from_offset_days(1.0);
+        assert_eq!(
+            one_day.tdb_nanoseconds_since_j2000,
+            86_400_i128 * 1_000_000_000
+        );
     }
 
     #[test]
-    fn solar_planet_focus_recenters_after_large_ephemeris_correction() {
-        let target = DemoSolarFocusTarget::Earth;
+    fn solar_planet_focus_tracks_live_ephemeris_motion() {
+        assert!(!solar_focus_tracks_live_pivot(DemoSolarFocusTarget::Scene));
+        assert!(!solar_focus_tracks_live_pivot(DemoSolarFocusTarget::Sun));
+        assert!(solar_focus_tracks_live_pivot(DemoSolarFocusTarget::Mercury));
+        assert!(solar_focus_tracks_live_pivot(DemoSolarFocusTarget::Venus));
+        assert!(solar_focus_tracks_live_pivot(DemoSolarFocusTarget::Earth));
+        assert!(solar_focus_tracks_live_pivot(DemoSolarFocusTarget::Moon));
+        assert!(solar_focus_tracks_live_pivot(DemoSolarFocusTarget::Mars));
+    }
+
+    #[test]
+    fn solar_live_focus_pivot_delta_preserves_camera_offset() {
+        let previous_focus = DVec3::new(140.0, 0.0, 20.0);
+        let current_focus = DVec3::new(141.5, 0.2, 19.0);
+        let camera_offset = DVec3::new(0.0, 0.01, 0.04);
+        let camera_pivot = previous_focus + camera_offset;
+        let delta = solar_live_focus_pivot_delta(
+            DemoSolarFocusTarget::Earth,
+            Some(DemoSolarFocusTarget::Earth),
+            Some(previous_focus),
+            current_focus,
+        )
+        .unwrap_or(DVec3::ZERO);
+        let next_camera_pivot = camera_pivot + delta;
+        let next_offset = next_camera_pivot - current_focus;
+
+        assert_close(next_offset.x, camera_offset.x);
+        assert_close(next_offset.y, camera_offset.y);
+        assert_close(next_offset.z, camera_offset.z);
+        assert_eq!(
+            solar_live_focus_pivot_delta(
+                DemoSolarFocusTarget::Sun,
+                Some(DemoSolarFocusTarget::Sun),
+                Some(previous_focus),
+                current_focus,
+            ),
+            None
+        );
+        assert_eq!(
+            solar_live_focus_pivot_delta(
+                DemoSolarFocusTarget::Earth,
+                Some(DemoSolarFocusTarget::Mars),
+                Some(previous_focus),
+                current_focus,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn solar_non_tracking_focus_recenters_after_large_ephemeris_correction() {
+        let target = DemoSolarFocusTarget::Sun;
         let threshold = solar_focus_recenter_threshold_units(target);
         let camera_state =
             MetricOrbitCameraState::new(DVec3::ZERO, 0.0, 0.0, solar_focus_distance_units(target));
         let small_correction = MetricSceneFocusPivot::resolved(
             MetricSceneId::PRIMARY,
-            MetricSceneFocusTarget::Object(BodyId::EARTH),
+            MetricSceneFocusTarget::Object(BodyId::SUN),
             DVec3::X * threshold * 0.5,
             None,
         );
         let large_correction = MetricSceneFocusPivot::resolved(
             MetricSceneId::PRIMARY,
-            MetricSceneFocusTarget::Object(BodyId::EARTH),
+            MetricSceneFocusTarget::Object(BodyId::SUN),
             DVec3::X * threshold * 2.0,
             None,
         );
@@ -510,8 +601,8 @@ mod tests {
     }
 
     #[test]
-    fn solar_planet_focus_does_not_recenter_user_pan() {
-        let target = DemoSolarFocusTarget::Earth;
+    fn solar_non_tracking_focus_does_not_recenter_user_pan() {
+        let target = DemoSolarFocusTarget::Sun;
         let threshold = solar_focus_recenter_threshold_units(target);
         let camera_state = MetricOrbitCameraState::new(
             DVec3::X * threshold * 2.0,
@@ -521,7 +612,7 @@ mod tests {
         );
         let focus_pivot = MetricSceneFocusPivot::resolved(
             MetricSceneId::PRIMARY,
-            MetricSceneFocusTarget::Object(BodyId::EARTH),
+            MetricSceneFocusTarget::Object(BodyId::SUN),
             DVec3::ZERO,
             None,
         );
@@ -732,14 +823,30 @@ mod tests {
     }
 
     #[test]
-    fn demo_skybox_load_is_deferred_past_the_first_render_frames() {
-        let skybox = demo_globe_skybox_config();
-        let deferred = DeferredGlobeSkybox::new(skybox.clone());
+    fn demo_skybox_starts_low_resolution_and_progressively_upgrades() {
+        let progressive = demo_globe_skybox_config();
+        let skyboxes = progressive.skyboxes();
+        let final_skybox = demo_final_globe_skybox_config();
 
-        assert_eq!(deferred.skybox(), &skybox);
+        assert_eq!(skyboxes.len(), DEMO_MILKY_WAY_SKYBOX_RESOLUTIONS.len());
+        let initial = &skyboxes[0];
+        assert!(initial.image_path.ends_with("milkyway_512.png"));
+        assert!(final_skybox.image_path.ends_with("milkyway_2048.png"));
         assert_eq!(
-            deferred.frames_remaining(),
-            DEFAULT_GLOBE_SKYBOX_DEFER_FRAMES
+            demo_milky_way_skybox_config(
+                DEMO_MILKY_WAY_SKYBOX_RESOLUTIONS[DEMO_MILKY_WAY_SKYBOX_RESOLUTIONS.len() - 1],
+                initial.brightness,
+            ),
+            final_skybox
+        );
+        assert_eq!(progressive.skyboxes().last(), Some(&final_skybox));
+        assert_close_f32(
+            progressive.upgrade_interval_seconds(),
+            DEMO_MILKY_WAY_SKYBOX_UPGRADE_SECONDS,
+        );
+        assert_eq!(
+            ferrisium_bevy::DEFAULT_PROGRESSIVE_GLOBE_SKYBOX_UPLOAD_IDLE_FRAMES,
+            DEMO_MILKY_WAY_UPGRADE_UPLOAD_IDLE_FRAMES
         );
     }
 
@@ -747,9 +854,17 @@ mod tests {
     fn solar_skybox_reuses_the_globe_asset_with_lower_brightness() {
         let globe = demo_globe_skybox_config();
         let solar = demo_solar_skybox_config();
+        let final_globe = demo_final_globe_skybox_config();
+        let final_solar = demo_final_solar_skybox_config();
 
-        assert_eq!(solar.image_path, globe.image_path);
-        assert!(solar.brightness < globe.brightness);
+        assert_eq!(solar.skyboxes().len(), globe.skyboxes().len());
+        assert_eq!(
+            solar.skyboxes()[0].image_path,
+            globe.skyboxes()[0].image_path
+        );
+        assert_eq!(final_solar.image_path, final_globe.image_path);
+        assert!(solar.skyboxes()[0].brightness < globe.skyboxes()[0].brightness);
+        assert!(final_solar.brightness < final_globe.brightness);
     }
 
     #[test]
@@ -758,10 +873,186 @@ mod tests {
         let mars_distance_units = one_au_units * 1.6;
         let ambient = demo_solar_ambient_fill_light();
 
-        assert_cool_space_fill_light(&ambient, 280.0, 440.0);
+        assert_cool_space_fill_light(&ambient, 360.0, 560.0);
         assert!(f64::from(SOLAR_SUN_POINT_LIGHT_RANGE_UNITS) > mars_distance_units);
-        assert!(solar_sun_light_illuminance_at_distance_units(one_au_units) >= 30_000.0);
-        assert!(solar_sun_light_illuminance_at_distance_units(mars_distance_units) >= 10_000.0);
+        assert!(solar_sun_light_illuminance_at_distance_units(one_au_units) >= 60_000.0);
+        assert!(solar_sun_light_illuminance_at_distance_units(mars_distance_units) >= 25_000.0);
+    }
+
+    #[test]
+    fn solar_earth_atmosphere_sits_above_true_surface() {
+        let earth_radius = solar_body_radius_units(&CelestialBody::earth());
+        let atmosphere_radius = solar_earth_atmosphere_radius_units(earth_radius);
+
+        assert!(atmosphere_radius > earth_radius);
+        assert_close_f32(
+            atmosphere_radius,
+            earth_radius * SOLAR_EARTH_ATMOSPHERE_RADIUS_FACTOR,
+        );
+        assert!(atmosphere_radius <= earth_radius * 1.05);
+    }
+
+    #[test]
+    fn solar_earth_cloud_layer_sits_between_surface_and_atmosphere() {
+        let earth_radius = solar_body_radius_units(&CelestialBody::earth());
+        let cloud_radius = solar_earth_cloud_radius_units(earth_radius);
+        let atmosphere_radius = solar_earth_atmosphere_radius_units(earth_radius);
+
+        assert!(cloud_radius > earth_radius);
+        assert!(cloud_radius < atmosphere_radius);
+        assert_close_f32(
+            cloud_radius,
+            earth_radius * SOLAR_EARTH_CLOUDS_RADIUS_FACTOR,
+        );
+    }
+
+    #[test]
+    fn solar_earth_night_lights_sit_between_surface_and_clouds() {
+        let earth_radius = solar_body_radius_units(&CelestialBody::earth());
+        let lights_radius = solar_earth_night_lights_radius_units(earth_radius);
+        let cloud_radius = solar_earth_cloud_radius_units(earth_radius);
+
+        assert!(lights_radius > earth_radius);
+        assert!(lights_radius < cloud_radius);
+        assert_close_f32(
+            lights_radius,
+            earth_radius * SOLAR_EARTH_NIGHT_LIGHTS_RADIUS_FACTOR,
+        );
+    }
+
+    #[test]
+    fn earth_equirectangular_overlay_rotation_matches_globe_axes() {
+        let rotation = earth_equirectangular_overlay_rotation();
+
+        assert_vec3_close(rotation * Vec3::Z, Vec3::Y);
+        assert_vec3_close(rotation * Vec3::X, Vec3::NEG_Z);
+        assert_vec3_close(rotation * Vec3::Y, Vec3::NEG_X);
+    }
+
+    #[test]
+    fn solar_earth_atmosphere_uses_shader_backed_transparent_material() {
+        let material = solar_earth_atmosphere_material();
+
+        assert_eq!(material.alpha_mode(), AlphaMode::Premultiplied);
+        assert_eq!(
+            SOLAR_EARTH_ATMOSPHERE_SHADER_PATH,
+            "shaders/solar_earth_atmosphere.wgsl"
+        );
+        assert_close_f32(
+            material.params.rayleigh_color_alpha.w,
+            SOLAR_EARTH_ATMOSPHERE_RAYLEIGH_ALPHA,
+        );
+        assert_close_f32(
+            material.params.terminator_color_alpha.w,
+            SOLAR_EARTH_ATMOSPHERE_TERMINATOR_ALPHA,
+        );
+        assert_close_f32(
+            material.params.night_color_alpha.w,
+            SOLAR_EARTH_ATMOSPHERE_NIGHT_ALPHA,
+        );
+        assert_close_f32(
+            material.params.falloff.x,
+            SOLAR_EARTH_ATMOSPHERE_FRESNEL_POWER,
+        );
+        assert_close_f32(material.params.falloff.y, SOLAR_EARTH_ATMOSPHERE_DISK_ALPHA);
+        assert_close_f32(material.params.falloff.z, SOLAR_EARTH_ATMOSPHERE_MAX_ALPHA);
+        assert!(material.params.falloff.y < material.params.rayleigh_color_alpha.w);
+    }
+
+    #[test]
+    fn solar_earth_clouds_use_nasa_texture_and_shader_material() {
+        let material = solar_earth_cloud_material(Handle::<Image>::default());
+
+        assert_eq!(material.alpha_mode(), AlphaMode::Premultiplied);
+        assert_eq!(
+            SOLAR_EARTH_CLOUDS_SHADER_PATH,
+            "shaders/solar_earth_clouds.wgsl"
+        );
+        assert_eq!(
+            SOLAR_EARTH_CLOUDS_TEXTURE_PATH,
+            "textures/earth_clouds_2048.jpg"
+        );
+        assert_close_f32(
+            material.params.cloud_color_alpha.w,
+            SOLAR_EARTH_CLOUDS_MAX_ALPHA,
+        );
+        assert_close_f32(
+            material.params.mask_params.x,
+            SOLAR_EARTH_CLOUDS_MASK_THRESHOLD,
+        );
+        assert_close_f32(
+            material.params.mask_params.y,
+            SOLAR_EARTH_CLOUDS_MASK_SOFTNESS,
+        );
+        assert_close_f32(
+            material.params.mask_params.z,
+            SOLAR_EARTH_CLOUDS_NIGHT_ALPHA_FACTOR,
+        );
+        assert!(material.params.mask_params.x < material.params.mask_params.y);
+        assert!(material.params.mask_params.z < 0.2);
+    }
+
+    #[test]
+    fn solar_earth_night_lights_use_black_marble_texture_and_additive_shader() {
+        let material = solar_earth_night_lights_material(Handle::<Image>::default());
+
+        assert_eq!(material.alpha_mode(), AlphaMode::Add);
+        assert_eq!(
+            SOLAR_EARTH_NIGHT_LIGHTS_SHADER_PATH,
+            "shaders/solar_earth_night_lights.wgsl"
+        );
+        assert_eq!(
+            SOLAR_EARTH_NIGHT_LIGHTS_TEXTURE_PATH,
+            "textures/earth_night_lights_2048.jpg"
+        );
+        assert_close_f32(
+            material.params.light_color_alpha.w,
+            SOLAR_EARTH_NIGHT_LIGHTS_MAX_ALPHA,
+        );
+        assert_close_f32(
+            material.params.mask_params.x,
+            SOLAR_EARTH_NIGHT_LIGHTS_MASK_THRESHOLD,
+        );
+        assert_close_f32(
+            material.params.mask_params.y,
+            SOLAR_EARTH_NIGHT_LIGHTS_MASK_SOFTNESS,
+        );
+        assert_close_f32(
+            material.params.mask_params.z,
+            SOLAR_EARTH_NIGHT_LIGHTS_TERMINATOR_FADE,
+        );
+        assert!(material.params.mask_params.x < material.params.mask_params.y);
+        assert!(material.params.mask_params.z > 0.0);
+    }
+
+    #[test]
+    fn solar_earth_atmosphere_sun_direction_param_is_normalized() {
+        let param = solar_earth_atmosphere_sun_direction_param(Vec3::new(10.0, 0.0, 0.0), 0.75);
+        let zero_param = solar_earth_atmosphere_sun_direction_param(Vec3::ZERO, 0.5);
+
+        assert_close_f32(param.x, 1.0);
+        assert_close_f32(param.y, 0.0);
+        assert_close_f32(param.z, 0.0);
+        assert_close_f32(param.w, 0.75);
+        assert_close_f32(
+            (zero_param.x.powi(2) + zero_param.y.powi(2) + zero_param.z.powi(2)).sqrt(),
+            1.0,
+        );
+        assert_close_f32(zero_param.w, 0.5);
+    }
+
+    #[test]
+    fn solar_sun_model_uses_nasa_asset_scaled_to_physical_radius() {
+        let sun_radius = solar_body_radius_units(&CelestialBody::sun());
+
+        assert_eq!(SOLAR_NASA_SUN_MODEL_ASSET_PATH, "models/nasa_sun.glb");
+        assert!((SOLAR_NASA_SUN_MODEL_SOURCE_RADIUS_UNITS - 500.0).abs() <= f32::EPSILON);
+        assert!(
+            (solar_nasa_sun_model_scale_units(sun_radius)
+                - sun_radius / SOLAR_NASA_SUN_MODEL_SOURCE_RADIUS_UNITS)
+                .abs()
+                <= f32::EPSILON
+        );
     }
 
     #[test]
@@ -1027,6 +1318,22 @@ mod tests {
     }
 
     #[test]
+    fn globe_earth_night_lights_show_only_for_earth_focus() {
+        assert_eq!(
+            demo_globe_earth_night_lights_visibility(BodyId::EARTH),
+            Visibility::Inherited
+        );
+        assert_eq!(
+            demo_globe_earth_night_lights_visibility(BodyId::MOON),
+            Visibility::Hidden
+        );
+        assert_eq!(
+            demo_globe_earth_night_lights_visibility(BodyId::MARS_BARYCENTER),
+            Visibility::Hidden
+        );
+    }
+
+    #[test]
     fn solar_trail_month_parser_clamps_to_supported_range() {
         assert_eq!(parse_solar_trail_months("0"), Some(SOLAR_TRAIL_MIN_MONTHS));
         assert_eq!(
@@ -1225,7 +1532,11 @@ mod tests {
         assert!(html.contains("mapControls.hidden = viewSelect.value !== \"map\""));
         assert!(html.contains("solarControls.hidden = viewSelect.value !== \"solar\""));
         assert!(html.contains("solarMetricNote.hidden = viewSelect.value !== \"solar\""));
-        assert!(html.contains("Epoch: J2000 (fixed)"));
+        assert!(html.contains("id=\"solar-time-offset\""));
+        assert!(html.contains("ferrisium.solar_time_offset_days"));
+        assert!(html.contains("searchParams.get(\"solar_days\")"));
+        assert!(html.contains("solarTimeRunning"));
+        assert!(html.contains("1 hour / second"));
         assert!(html.contains("ferrisium.globe_focus"));
         assert!(html.contains("id=\"globe-focus\""));
         assert!(html.contains("<option value=\"mercury\">Mercury</option>"));

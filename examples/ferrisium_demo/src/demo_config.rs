@@ -1,11 +1,15 @@
 #![cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 
 use bevy::prelude::{Color, GlobalAmbientLight, Resource};
+#[cfg(test)]
+use ferrisium_bevy::prelude::GlobeSkybox;
 #[cfg(target_arch = "wasm32")]
 use ferrisium_bevy::prelude::{CelestialFocus, MetricSceneFocusSelection};
-use ferrisium_bevy::prelude::{GlobeSkybox, MetricSceneFocusTarget, MilkyWaySkyboxResolution};
+use ferrisium_bevy::prelude::{
+    MetricSceneFocusTarget, MilkyWaySkyboxResolution, ProgressiveGlobeSkybox,
+};
 use ferrisium_core::prelude::{LonLat, NasaTrekRegularBody, TileSource};
-use ferrisium_core::space::{BodyId, Epoch};
+use ferrisium_core::space::{offset_epoch_seconds, BodyId, Epoch};
 
 #[cfg(target_arch = "wasm32")]
 use crate::browser_params::{
@@ -15,7 +19,17 @@ use crate::browser_params::{
 
 const DEMO_SPACE_FILL_LIGHT_COLOR: Color = Color::srgb(0.68, 0.76, 0.95);
 const DEMO_GLOBE_SPACE_FILL_BRIGHTNESS: f32 = 320.0;
-const SOLAR_SPACE_FILL_BRIGHTNESS: f32 = 360.0;
+const SOLAR_SPACE_FILL_BRIGHTNESS: f32 = 460.0;
+const DEMO_GLOBE_SKYBOX_BRIGHTNESS: f32 = 1_000.0;
+const DEMO_SOLAR_SKYBOX_BRIGHTNESS: f32 = 420.0;
+pub(crate) const DEMO_MILKY_WAY_SKYBOX_UPGRADE_SECONDS: f32 = 4.0;
+pub(crate) const DEMO_MILKY_WAY_INITIAL_UPLOAD_IDLE_FRAMES: u32 = 6;
+pub(crate) const DEMO_MILKY_WAY_UPGRADE_UPLOAD_IDLE_FRAMES: u32 = 6;
+pub(crate) const DEMO_MILKY_WAY_SKYBOX_RESOLUTIONS: [MilkyWaySkyboxResolution; 3] = [
+    MilkyWaySkyboxResolution::Face512,
+    MilkyWaySkyboxResolution::Face1024,
+    MilkyWaySkyboxResolution::Face2048,
+];
 
 pub(crate) const DEMO_GLOBE_CAMERA_QUERY_MIN_DISTANCE_RADIUS_FACTOR: f32 = 1.02;
 pub(crate) const DEMO_GLOBE_CAMERA_QUERY_MAX_DISTANCE_RADIUS_FACTOR: f32 = 20.0;
@@ -27,6 +41,9 @@ pub(crate) const SOLAR_TRAIL_DEFAULT_MONTHS: u32 = 12;
 pub(crate) const SOLAR_TRAIL_MIN_MONTHS: u32 = 1;
 pub(crate) const SOLAR_TRAIL_MAX_MONTHS: u32 = 36;
 pub(crate) const SOLAR_TRAIL_RESAMPLE_SECONDS: f64 = 86_400.0;
+pub(crate) const SOLAR_TIME_MIN_OFFSET_DAYS: f64 = -3_650.0;
+pub(crate) const SOLAR_TIME_MAX_OFFSET_DAYS: f64 = 3_650.0;
+pub(crate) const SOLAR_TIME_DEFAULT_OFFSET_DAYS: f64 = 0.0;
 
 #[cfg(target_arch = "wasm32")]
 pub(crate) const MAPBOX_TOKEN_STORAGE_KEY: &str = "ferrisium.mapbox_token";
@@ -42,6 +59,8 @@ pub(crate) const SOLAR_TRAIL_MONTHS_STORAGE_KEY: &str = "ferrisium.solar_trail_m
 pub(crate) const SOLAR_CAMERA_RESET_STORAGE_KEY: &str = "ferrisium.solar_camera_reset";
 #[cfg(target_arch = "wasm32")]
 pub(crate) const SOLAR_FOCUS_STORAGE_KEY: &str = "ferrisium.solar_focus";
+#[cfg(target_arch = "wasm32")]
+pub(crate) const SOLAR_TIME_OFFSET_DAYS_STORAGE_KEY: &str = "ferrisium.solar_time_offset_days";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DemoMode {
@@ -125,6 +144,11 @@ pub(crate) fn browser_demo_mode() -> DemoMode {
 
 pub(crate) const fn solar_demo_epoch() -> Epoch {
     Epoch::J2000
+}
+
+pub(crate) fn solar_epoch_from_offset_days(offset_days: f64) -> Epoch {
+    let offset_days = clamp_solar_time_offset_days(offset_days);
+    offset_epoch_seconds(solar_demo_epoch(), offset_days * 86_400.0)
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -306,6 +330,21 @@ pub(crate) fn browser_solar_trail_months() -> u32 {
 }
 
 #[cfg(target_arch = "wasm32")]
+pub(crate) fn browser_solar_epoch() -> Epoch {
+    solar_epoch_from_offset_days(browser_solar_epoch_offset_days())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn browser_solar_epoch_offset_days() -> f64 {
+    browser_local_storage_item(SOLAR_TIME_OFFSET_DAYS_STORAGE_KEY)
+        .or_else(|| browser_query_param("solar_days"))
+        .or_else(|| browser_query_param("solar_epoch_days"))
+        .as_deref()
+        .and_then(parse_solar_epoch_offset_days)
+        .unwrap_or(SOLAR_TIME_DEFAULT_OFFSET_DAYS)
+}
+
+#[cfg(target_arch = "wasm32")]
 pub(crate) fn browser_solar_focus_target() -> DemoSolarFocusTarget {
     browser_query_param("solar_focus")
         .or_else(|| browser_local_storage_item(SOLAR_FOCUS_STORAGE_KEY))
@@ -401,12 +440,55 @@ pub(crate) fn parse_solar_trail_months(value: &str) -> Option<u32> {
     Some(months.clamp(SOLAR_TRAIL_MIN_MONTHS, SOLAR_TRAIL_MAX_MONTHS))
 }
 
-pub(crate) fn demo_globe_skybox_config() -> GlobeSkybox {
-    GlobeSkybox::milky_way(MilkyWaySkyboxResolution::Face4096)
+pub(crate) fn parse_solar_epoch_offset_days(value: &str) -> Option<f64> {
+    let offset_days = value.trim().parse::<f64>().ok()?;
+    offset_days
+        .is_finite()
+        .then(|| clamp_solar_time_offset_days(offset_days))
 }
 
-pub(crate) fn demo_solar_skybox_config() -> GlobeSkybox {
-    demo_globe_skybox_config().with_brightness(420.0)
+fn clamp_solar_time_offset_days(offset_days: f64) -> f64 {
+    offset_days.clamp(SOLAR_TIME_MIN_OFFSET_DAYS, SOLAR_TIME_MAX_OFFSET_DAYS)
+}
+
+pub(crate) fn demo_globe_skybox_config() -> ProgressiveGlobeSkybox {
+    demo_milky_way_skybox_sequence(DEMO_GLOBE_SKYBOX_BRIGHTNESS)
+}
+
+pub(crate) fn demo_solar_skybox_config() -> ProgressiveGlobeSkybox {
+    demo_milky_way_skybox_sequence(DEMO_SOLAR_SKYBOX_BRIGHTNESS)
+}
+
+#[cfg(test)]
+pub(crate) fn demo_final_globe_skybox_config() -> GlobeSkybox {
+    demo_milky_way_skybox_config(
+        DEMO_MILKY_WAY_SKYBOX_RESOLUTIONS[DEMO_MILKY_WAY_SKYBOX_RESOLUTIONS.len() - 1],
+        DEMO_GLOBE_SKYBOX_BRIGHTNESS,
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn demo_final_solar_skybox_config() -> GlobeSkybox {
+    demo_milky_way_skybox_config(
+        DEMO_MILKY_WAY_SKYBOX_RESOLUTIONS[DEMO_MILKY_WAY_SKYBOX_RESOLUTIONS.len() - 1],
+        DEMO_SOLAR_SKYBOX_BRIGHTNESS,
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn demo_milky_way_skybox_config(
+    resolution: MilkyWaySkyboxResolution,
+    brightness: f32,
+) -> GlobeSkybox {
+    GlobeSkybox::milky_way(resolution).with_brightness(brightness)
+}
+
+fn demo_milky_way_skybox_sequence(brightness: f32) -> ProgressiveGlobeSkybox {
+    ProgressiveGlobeSkybox::milky_way(DEMO_MILKY_WAY_SKYBOX_RESOLUTIONS)
+        .with_brightness(brightness)
+        .with_upgrade_interval_seconds(DEMO_MILKY_WAY_SKYBOX_UPGRADE_SECONDS)
+        .with_initial_upload_idle_frames(DEMO_MILKY_WAY_INITIAL_UPLOAD_IDLE_FRAMES)
+        .with_upgrade_upload_idle_frames(DEMO_MILKY_WAY_UPGRADE_UPLOAD_IDLE_FRAMES)
 }
 
 pub(crate) const fn demo_globe_ambient_fill_light() -> GlobalAmbientLight {
