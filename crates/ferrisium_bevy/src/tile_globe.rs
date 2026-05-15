@@ -222,7 +222,9 @@ pub(crate) fn sync_globe_tile_patches(
     mut meshes: ResMut<'_, Assets<Mesh>>,
     mut materials: ResMut<'_, Assets<StandardMaterial>>,
 ) {
-    if !supports_focused_globe_renderer(&active_source.0, celestial_focus.target) {
+    if !supports_focused_globe_renderer(&active_source.0, celestial_focus.target)
+        || !globe_views.iter().next().map_or(true, |s| s.render_enabled)
+    {
         despawn_all_globe_tiles(&mut commands, &mut globe_tile_entities);
         return;
     }

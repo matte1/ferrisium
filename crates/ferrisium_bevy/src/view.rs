@@ -32,6 +32,10 @@ pub struct Map2dState {
     pub center: LonLat,
     /// Continuous zoom level for interaction and rendering.
     pub zoom: f64,
+    /// When false, map tile sprites are despawned and no new tiles are
+    /// requested. The map camera remains active so that other render
+    /// consumers (e.g. egui) still work.
+    pub render_enabled: bool,
 }
 
 impl Default for Map2dState {
@@ -39,6 +43,7 @@ impl Default for Map2dState {
         Self {
             center: LonLat::default(),
             zoom: 2.0,
+            render_enabled: true,
         }
     }
 }

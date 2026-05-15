@@ -441,7 +441,7 @@ pub(crate) fn sync_h3_map_overlays(
             }
             if handles.fill_color_key != fill_color_key {
                 if let Some(material) = materials.get_mut(&handles.fill_material) {
-                    material.color = color_from_rgba(fill_rgba);
+                    *material = h3_map_material(fill_rgba);
                 }
                 handles.fill_color_key = fill_color_key;
             }
@@ -467,7 +467,7 @@ pub(crate) fn sync_h3_map_overlays(
             overlay.style.fill_rgba(),
             context,
         ));
-        let fill_material = materials.add(ColorMaterial::from(color_from_rgba(fill_rgba)));
+        let fill_material = materials.add(h3_map_material(fill_rgba));
         let outline_mesh = meshes.add(build_h3_map_outline_mesh(geometry.as_ref(), context));
         let outline_material = materials.add(ColorMaterial::from(color_from_rgba(outline_rgba)));
         let transform = Transform::from_xyz(0.0, 0.0, overlay.map_z);
@@ -1754,6 +1754,16 @@ fn lon_lat_from_globe_direction(direction: DVec3) -> LonLat {
 fn push_normal(normals: &mut Vec<[f32; 3]>, position: DVec3) {
     let normal = position.normalize_or_zero();
     normals.push([normal.x as f32, normal.y as f32, normal.z as f32]);
+}
+
+fn h3_map_material(rgba: [f32; 4]) -> ColorMaterial {
+    // `ColorMaterial::default()` uses `AlphaMode2d::Blend`, while `ColorMaterial::from(Color)`
+    // switches to `Opaque` when alpha >= 1.0. Per-cell vertex colors can carry their own alpha, so
+    // we always need blend.
+    ColorMaterial {
+        color: color_from_rgba(rgba),
+        ..ColorMaterial::default()
+    }
 }
 
 fn h3_fill_material_rgba(overlay: &H3Overlay) -> [f32; 4] {
