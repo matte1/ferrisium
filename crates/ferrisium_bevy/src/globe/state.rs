@@ -65,6 +65,10 @@ pub struct Globe3dState {
     /// Higher values keep the globe sharper at wide zooms and during close
     /// inspection, at the cost of more HTTP requests and more patch meshes.
     pub max_selected_tiles: usize,
+    /// When false, globe tile patches and polar caps are despawned and no new
+    /// tiles are requested. The globe camera remains active so that other
+    /// render consumers (e.g. egui) still work.
+    pub render_enabled: bool,
 }
 
 impl Default for Globe3dState {
@@ -78,6 +82,7 @@ impl Default for Globe3dState {
             camera_up_mode: GlobeCameraUpMode::default(),
             tile_zoom: DEFAULT_GLOBE_TILE_ZOOM,
             max_selected_tiles: DEFAULT_MAX_SELECTED_GLOBE_TILES,
+            render_enabled: true,
         }
     }
 }

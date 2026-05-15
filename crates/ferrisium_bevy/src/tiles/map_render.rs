@@ -81,7 +81,7 @@ pub(crate) fn sync_tile_sprites(
         return;
     };
 
-    if !supports_map_renderer(&active_source.0) {
+    if !active_view.render_enabled || !supports_map_renderer(&active_source.0) {
         despawn_all_tile_sprites(&mut commands, &mut tile_sprite_entities);
         return;
     }
