@@ -225,7 +225,7 @@ fn sync_globe_position_components(
     if let Some(mut cell) = cell {
         *cell = next_cell;
     } else {
-        commands.entity(entity).insert(next_cell);
+        commands.entity(entity).try_insert(next_cell);
     }
 
     if let Some(mut transform) = transform {
@@ -233,15 +233,17 @@ fn sync_globe_position_components(
     } else {
         commands
             .entity(entity)
-            .insert(Transform::from_translation(next_translation));
+            .try_insert(Transform::from_translation(next_translation));
     }
 
     if global_transform.is_none() {
-        commands.entity(entity).insert(GlobalTransform::default());
+        commands
+            .entity(entity)
+            .try_insert(GlobalTransform::default());
     }
 
     if parent.map(ChildOf::parent) != Some(root) {
-        commands.entity(root).add_child(entity);
+        commands.entity(entity).try_insert(ChildOf(root));
     }
 }
 
