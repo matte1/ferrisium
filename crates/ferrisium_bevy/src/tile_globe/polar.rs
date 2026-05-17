@@ -26,6 +26,8 @@ pub(super) struct GlobePolarCapEntities {
     pub(super) north: Entity,
     pub(super) south: Entity,
     pub(super) radius: f32,
+    north_color: Option<[u8; 3]>,
+    south_color: Option<[u8; 3]>,
 }
 
 /// Ensures Web Mercator polar caps exist for the current primary globe radius.
@@ -37,6 +39,8 @@ pub(super) fn sync_globe_polar_caps(
     parent: Entity,
     radius: f32,
     projection: TileProjection,
+    north_color: Option<[u8; 3]>,
+    south_color: Option<[u8; 3]>,
 ) {
     if projection != TileProjection::WebMercator {
         despawn_globe_polar_caps(commands, globe_tile_entities);
@@ -44,26 +48,41 @@ pub(super) fn sync_globe_polar_caps(
     }
 
     if let Some(polar_caps) = globe_tile_entities.polar_caps {
-        if (polar_caps.radius - radius).abs() <= f32::EPSILON {
+        if (polar_caps.radius - radius).abs() <= f32::EPSILON
+            && colors_match(polar_caps.north_color, north_color)
+            && colors_match(polar_caps.south_color, south_color)
+        {
             return;
         }
 
         despawn_globe_polar_caps(commands, globe_tile_entities);
     }
 
-    let material = materials.add(StandardMaterial {
-        base_color: polar_cap_color(),
-        perceptual_roughness: 1.0,
-        reflectance: 0.0,
-        cull_mode: None,
-        ..default()
-    });
+    let make_cap_material =
+        |materials: &mut Assets<StandardMaterial>, color: Option<[u8; 3]>| {
+            let [r, g, b] = color.map_or_else(
+                || {
+                    let c = polar_cap_color().to_srgba();
+                    [c.red, c.green, c.blue]
+                },
+                |[r, g, b]| [f32::from(r) / 255.0, f32::from(g) / 255.0, f32::from(b) / 255.0],
+            );
+            materials.add(StandardMaterial {
+                base_color: Color::srgb(r, g, b),
+                perceptual_roughness: 1.0,
+                reflectance: 0.0,
+                cull_mode: None,
+                ..default()
+            })
+        };
+    let north_material = make_cap_material(&mut *materials, north_color);
+    let south_material = make_cap_material(&mut *materials, south_color);
     let north = commands
         .spawn((
             Name::new("Globe North Polar Cap"),
             GlobePolarCap,
             Mesh3d(meshes.add(build_globe_polar_cap_mesh(radius, true))),
-            MeshMaterial3d(material.clone()),
+            MeshMaterial3d(north_material),
         ))
         .id();
     let south = commands
@@ -71,7 +90,7 @@ pub(super) fn sync_globe_polar_caps(
             Name::new("Globe South Polar Cap"),
             GlobePolarCap,
             Mesh3d(meshes.add(build_globe_polar_cap_mesh(radius, false))),
-            MeshMaterial3d(material),
+            MeshMaterial3d(south_material),
         ))
         .id();
     parent_to_globe_surface_anchor(commands, parent, north);
@@ -81,6 +100,8 @@ pub(super) fn sync_globe_polar_caps(
         north,
         south,
         radius,
+        north_color,
+        south_color,
     });
 }
 
@@ -95,6 +116,10 @@ pub(super) fn despawn_globe_polar_caps(
 
     commands.entity(polar_caps.north).despawn();
     commands.entity(polar_caps.south).despawn();
+}
+
+fn colors_match(a: Option<[u8; 3]>, b: Option<[u8; 3]>) -> bool {
+    a == b
 }
 
 /// Neutral cap color used where Web Mercator has no imagery.

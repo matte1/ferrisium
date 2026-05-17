@@ -264,6 +264,8 @@ pub(crate) fn sync_globe_tile_patches(
         surface_anchor.entity,
         polar_cap_radius,
         active_source.0.projection,
+        active_source.0.north_polar_cap_color,
+        active_source.0.south_polar_cap_color,
     );
 
     let desired_tiles = globe_visible_tiles_for_view(tile_view, &active_source.0);
