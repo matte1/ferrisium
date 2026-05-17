@@ -585,6 +585,10 @@ pub struct TileSource {
     pub projection: TileProjection,
     /// Planetary body the tile source represents.
     pub body: PlanetaryBody,
+    /// sRGB color (0-255) for the north Web Mercator polar cap. `None` uses a default neutral gray.
+    pub north_polar_cap_color: Option<[u8; 3]>,
+    /// sRGB color (0-255) for the south Web Mercator polar cap. `None` uses a default neutral gray.
+    pub south_polar_cap_color: Option<[u8; 3]>,
 }
 
 impl TileSource {
@@ -600,6 +604,8 @@ impl TileSource {
             raster_tile_size: 256,
             projection: TileProjection::WebMercator,
             body: PlanetaryBody::earth(),
+            north_polar_cap_color: None,
+            south_polar_cap_color: None,
         }
     }
 
@@ -846,6 +852,27 @@ impl TileSource {
     pub fn with_body(mut self, body: PlanetaryBody) -> Self {
         self.body = body;
         self
+    }
+
+    /// Sets the sRGB color for the north Web Mercator polar cap.
+    #[must_use]
+    pub fn with_north_polar_cap_color(mut self, rgb: [u8; 3]) -> Self {
+        self.north_polar_cap_color = Some(rgb);
+        self
+    }
+
+    /// Sets the sRGB color for the south Web Mercator polar cap.
+    #[must_use]
+    pub fn with_south_polar_cap_color(mut self, rgb: [u8; 3]) -> Self {
+        self.south_polar_cap_color = Some(rgb);
+        self
+    }
+
+    /// Sets both north and south polar cap colors.
+    #[must_use]
+    pub fn with_polar_cap_colors(self, north: [u8; 3], south: [u8; 3]) -> Self {
+        self.with_north_polar_cap_color(north)
+            .with_south_polar_cap_color(south)
     }
 
     /// Returns the expanded URL if the tile is inside the source zoom range.
