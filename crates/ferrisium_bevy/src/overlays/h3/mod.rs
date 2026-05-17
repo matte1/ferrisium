@@ -712,7 +712,7 @@ pub(crate) fn sync_h3_map_picking(
         .lon_lat
         .and_then(|lon_lat| pick_h3_map_cell(lon_lat, &active_source, overlays.iter()));
 
-    if buttons.just_pressed(MouseButton::Left) {
+    if buttons.just_released(MouseButton::Left) {
         if let Some(hit) = hit.clone() {
             clicked.write(H3CellClicked { hit });
         }
@@ -779,7 +779,7 @@ pub(crate) fn sync_h3_globe_picking(
     )
     .and_then(|lon_lat| pick_h3_globe_cell(lon_lat, *celestial_focus, overlays.iter()));
 
-    if buttons.just_pressed(MouseButton::Left) {
+    if buttons.just_released(MouseButton::Left) {
         if let Some(hit) = hit.clone() {
             clicked.write(H3CellClicked { hit });
         }
